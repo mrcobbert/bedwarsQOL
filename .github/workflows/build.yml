@@ -1,0 +1,78 @@
+# Builds the mod on every push/PR, and on a version tag (v*) publishes a GitHub Release
+# with the correct production jar attached (the remapped, NON -dev jar).
+
+name: Build & Release
+
+on:
+  pull_request:
+  workflow_dispatch:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+
+concurrency:
+  group: ${{ github.head_ref || format('{0}-{1}', github.ref, github.run_number) }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write   # needed to create releases on tag push
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+
+      - name: Cache Gradle / Loom
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+            **/loom-cache
+            **/prebundled-jars
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Chmod Gradle
+        run: chmod +x ./gradlew
+
+      - name: Build
+        run: ./gradlew build --no-daemon
+
+      # The production jar is the remapped, non-dev one. The shadowJar (-dev) must NOT be shipped:
+      # it uses dev mappings and crashes an obfuscated Forge runtime.
+      - name: Collect release jar
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          mkdir -p release
+          find versions -path '*/build/libs/*.jar' ! -name '*-dev.jar' ! -name '*-sources.jar' \
+            -exec cp {} release/ \;
+          echo "Release artifacts:"; ls -la release/
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BedwarsQOL-jar
+          path: |
+            versions/**/build/libs/*.jar
+            !versions/**/build/libs/*-dev.jar
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.jar
+          generate_release_notes: true
+          fail_on_unmatched_files: true

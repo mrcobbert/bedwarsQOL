@@ -1,0 +1,837 @@
+package com.bedwarsqol.hud;
+
+import com.bedwarsqol.BedwarsQol;
+import com.bedwarsqol.bedwars.GeneratorTracker;
+import com.bedwarsqol.config.ClientSettings;
+import com.bedwarsqol.feature.ClickTracker;
+import com.bedwarsqol.feature.PingTracker;
+import com.bedwarsqol.feature.TpsTracker;
+import com.bedwarsqol.stats.HypixelContext;
+import net.minecraft.client.Minecraft;
+import com.bedwarsqol.gui.render.BedwarsQolFont;
+import com.bedwarsqol.gui.render.GuiRender;
+import com.bedwarsqol.gui.render.Theme;
+import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.client.gui.FontRenderer;
+import net.minecraft.client.gui.Gui;
+import net.minecraft.client.gui.ScaledResolution;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.RenderHelper;
+import net.minecraft.client.renderer.entity.RenderItem;
+import net.minecraft.init.Items;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.potion.Potion;
+import net.minecraft.potion.PotionEffect;
+import net.minecraft.util.ResourceLocation;
+import net.minecraft.util.StatCollector;
+import net.minecraftforge.client.event.RenderGameOverlayEvent;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
+import java.util.Locale;
+
+public class BedwarsHudRenderer {
+
+    public static final String POTION_HUD = "potion";
+    public static final String ARMOR_HUD = "armor";
+    public static final String INFO_HUD = "info";
+    public static final String INVENTORY_HUD = "inventory";
+    public static final String DIAMOND_TIMER_HUD = "diamondtimer";
+    public static final String EMERALD_TIMER_HUD = "emeraldtimer";
+    public static final String KEYSTROKES_HUD = "keystrokes";
+    private static final int INV_COLS = 9;
+    private static final int INV_ROWS = 3; // storage rows only — the hotbar is already on screen
+    private static final float INV_CELL = 18f;
+    private static final float[] ANCHOR_X = {0f, 0.5f, 1f, 0f, 0.5f, 1f, 0f, 0.5f, 1f};
+    private static final float[] ANCHOR_Y = {0f, 0f, 0f, 0.5f, 0.5f, 0.5f, 1f, 1f, 1f};
+
+    private static final String[] ROMAN = {"I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"};
+    private static final ResourceLocation INVENTORY_TEXTURE = new ResourceLocation("textures/gui/container/inventory.png");
+    private static final float TEXT_HEIGHT = 9f;
+    private static final float LINE_GAP = 2f;
+    private static final float SECONDARY_SCALE = 0.75f;
+    private static final float SECONDARY_GAP = 2f;
+    private static final float POTION_ICON_SIZE = 18f;
+    private static final float POTION_ICON_TIMER_GAP = 3f;
+    private static final float ARMOR_ICON_SIZE = 16f;
+    private static final int TEXT_COLOR = 0xFFFFFFFF;
+
+    // Keystrokes: WASD over a spacebar, as rounded grayscale key caps that invert when pressed.
+    // Geometry is in local units (multiplied by the HUD scale at draw time).
+    private static final float KS_UNIT = 18f;     // square key cap side
+    private static final float KS_GAP = 2f;       // gap between caps
+    private static final float KS_SPACE_H = 14f;  // spacebar height (a bit shorter than the WASD caps)
+    private static final float KS_LETTER = 1.0f;  // letter scale within a cap
+    private static final int KS_FILL_OFF = 0x70202020;   // translucent dark cap (idle)
+    private static final int KS_FILL_ON = 0x40FFFFFF;    // subtle highlight cap (pressed)
+    private static final int KS_TEXT_OFF = 0xFFEDEDED;   // light letter on dark cap
+    private static final int KS_TEXT_ON = 0xFFFFFFFF;    // letter brightens when pressed
+
+    @SubscribeEvent
+    public void onRenderText(RenderGameOverlayEvent.Text event) {
+        Minecraft mc = Minecraft.getMinecraft();
+        ClientSettings cfg = BedwarsQol.config;
+        if (mc == null || mc.thePlayer == null || cfg == null) return;
+        if (mc.gameSettings != null && mc.gameSettings.showDebugInfo) return;
+
+        cfg.sanitize();
+        render(mc, cfg, false);
+    }
+
+    public static void renderEditPreview(Minecraft mc, ClientSettings cfg) {
+        render(mc, cfg, true);
+    }
+
+    public static List<HudBox> getHudBoxes(Minecraft mc, ClientSettings cfg, boolean example) {
+        if (mc == null || cfg == null) return Collections.emptyList();
+        cfg.sanitize();
+
+        List<HudBox> boxes = new ArrayList<>(8);
+        addBox(boxes, potionBox(mc, cfg, example));
+        addBox(boxes, armorBox(mc, cfg, example));
+        addBox(boxes, infoBox(mc, cfg, example));
+        addBox(boxes, inventoryBox(mc, cfg, example));
+        addBox(boxes, timerBox(mc, cfg, example, true));
+        addBox(boxes, timerBox(mc, cfg, example, false));
+        addBox(boxes, keystrokesBox(mc, cfg, example));
+        return boxes;
+    }
+
+    private static void addBox(List<HudBox> boxes, HudBox box) {
+        if (box != null) boxes.add(box);
+    }
+
+    public static void setHudAbsolutePosition(ClientSettings cfg, String id, float x, float y, float width, float height, float screenWidth, float screenHeight) {
+        int anchor = anchorFor(x, y, width, height, screenWidth, screenHeight);
+        int storedX = Math.round(x - ANCHOR_X[anchor] * screenWidth + ANCHOR_X[anchor] * width);
+        int storedY = Math.round(y - ANCHOR_Y[anchor] * screenHeight + ANCHOR_Y[anchor] * height);
+        if (POTION_HUD.equals(id)) {
+            cfg.potionHudAnchor = anchor;
+            cfg.potionHudX = storedX;
+            cfg.potionHudY = storedY;
+        } else if (ARMOR_HUD.equals(id)) {
+            cfg.armorHudAnchor = anchor;
+            cfg.armorHudX = storedX;
+            cfg.armorHudY = storedY;
+        } else if (INFO_HUD.equals(id)) {
+            cfg.infoHudAnchor = anchor;
+            cfg.infoHudX = storedX;
+            cfg.infoHudY = storedY;
+        } else if (INVENTORY_HUD.equals(id)) {
+            cfg.inventoryHudAnchor = anchor;
+            cfg.inventoryHudX = storedX;
+            cfg.inventoryHudY = storedY;
+        } else if (DIAMOND_TIMER_HUD.equals(id)) {
+            cfg.diamondTimerHudAnchor = anchor;
+            cfg.diamondTimerHudX = storedX;
+            cfg.diamondTimerHudY = storedY;
+        } else if (EMERALD_TIMER_HUD.equals(id)) {
+            cfg.emeraldTimerHudAnchor = anchor;
+            cfg.emeraldTimerHudX = storedX;
+            cfg.emeraldTimerHudY = storedY;
+        } else if (KEYSTROKES_HUD.equals(id)) {
+            cfg.keystrokesHudAnchor = anchor;
+            cfg.keystrokesHudX = storedX;
+            cfg.keystrokesHudY = storedY;
+        }
+    }
+
+    private static void render(Minecraft mc, ClientSettings cfg, boolean example) {
+        if (cfg.potionStatusEnabled) drawPotionHud(mc, cfg, example);
+        if (cfg.armorTypeEnabled) drawArmorHud(mc, cfg, example);
+        if (cfg.infoEnabled) drawInfoHud(mc, cfg, example);
+        drawInventoryHud(mc, cfg, example);
+        drawTimerHud(mc, cfg, example, true);
+        drawTimerHud(mc, cfg, example, false);
+        if (cfg.keystrokesEnabled) drawKeystrokesHud(mc, cfg, example);
+    }
+
+    private static void drawPotionHud(Minecraft mc, ClientSettings cfg, boolean example) {
+        HudBox box = potionBox(mc, cfg, example);
+        if (box == null) return;
+        if (cfg.hudDisplayMode == 1) {
+            List<PotionEntry> entries = potionEntries(mc, example);
+            if (!entries.isEmpty()) drawPotionImages(mc, cfg, entries, box.x, box.y);
+            return;
+        }
+
+        List<Line> lines = potionLines(mc, example);
+        if (!lines.isEmpty()) drawLines(mc.fontRendererObj, lines, box.x, box.y, cfg.potionHudScale);
+    }
+
+    private static void drawArmorHud(Minecraft mc, ClientSettings cfg, boolean example) {
+        HudBox box = armorBox(mc, cfg, example);
+        if (box == null) return;
+        ItemStack leggings = currentLeggings(mc, example);
+        if (leggings == null) return;
+
+        if (cfg.hudDisplayMode == 1) {
+            drawArmorIcon(mc, cfg, leggings, box.x, box.y);
+            return;
+        }
+
+        String name = materialName(leggings.getItem());
+        if (name != null) {
+            drawLines(mc.fontRendererObj, Collections.singletonList(new Line(name)), box.x, box.y, cfg.armorHudScale);
+        }
+    }
+
+    private static void drawInfoHud(Minecraft mc, ClientSettings cfg, boolean example) {
+        HudBox box = infoBox(mc, cfg, example);
+        if (box == null) return;
+        drawLines(mc.fontRendererObj, infoLines(mc, example), box.x, box.y, cfg.infoHudScale);
+    }
+
+    private static HudBox infoBox(Minecraft mc, ClientSettings cfg, boolean example) {
+        if (!cfg.infoEnabled) return null;
+        Size size = infoSize(mc, cfg, example);
+        if (size.width <= 0f || size.height <= 0f) return null;
+        ScaledResolution resolution = new ScaledResolution(mc);
+        float x = absoluteX(cfg.infoHudX, cfg.infoHudAnchor, size.width, resolution.getScaledWidth());
+        float y = absoluteY(cfg.infoHudY, cfg.infoHudAnchor, size.height, resolution.getScaledHeight());
+        return new HudBox(INFO_HUD, "Info HUD", x, y, size.width, size.height);
+    }
+
+    private static Size infoSize(Minecraft mc, ClientSettings cfg, boolean example) {
+        return textSize(mc.fontRendererObj, infoLines(mc, example), cfg.infoHudScale);
+    }
+
+    private static List<Line> infoLines(Minecraft mc, boolean example) {
+        if (example) {
+            List<Line> out = new ArrayList<>(4);
+            out.add(new Line("FPS: 120"));
+            out.add(new Line("Ping: 23ms"));
+            out.add(new Line("TPS: 20.0"));
+            out.add(new Line("CPS: 11"));
+            return out;
+        }
+        List<Line> lines = new ArrayList<>(4);
+        lines.add(new Line("FPS: " + Minecraft.getDebugFPS()));
+        lines.add(new Line("Ping: " + pingText()));
+        lines.add(new Line("TPS: " + formatTps()));
+        lines.add(new Line("CPS: " + ClickTracker.cps()));
+        return lines;
+    }
+
+    private static String pingText() {
+        int ping = PingTracker.ping();
+        return ping < 0 ? "--" : ping + "ms";
+    }
+
+    private static String formatTps() {
+        if (!TpsTracker.hasData()) return "--";
+        double t = TpsTracker.getTps();
+        if (t > 20.0) t = 20.0;
+        return String.format(Locale.US, "%.1f", t);
+    }
+
+    private static void drawLines(FontRenderer fr, List<Line> lines, float x, float y, float scale) {
+        if (fr == null || lines.isEmpty()) return;
+        float textHeight = TEXT_HEIGHT * scale;
+        float lineStep = (TEXT_HEIGHT + LINE_GAP) * scale;
+        float secondaryScale = scale * SECONDARY_SCALE;
+        float secondaryYOffset = (textHeight - TEXT_HEIGHT * secondaryScale) / 2f;
+        float gap = SECONDARY_GAP * scale;
+
+        for (int i = 0; i < lines.size(); i++) {
+            Line line = lines.get(i);
+            float ly = y + i * lineStep;
+            drawScaledString(fr, line.primary, x, ly, scale);
+            if (!line.secondary.isEmpty()) {
+                float secX = x + BedwarsQolFont.width(line.primary) * scale + gap;
+                drawScaledString(fr, line.secondary, secX, ly + secondaryYOffset, secondaryScale);
+            }
+        }
+    }
+
+    private static void drawPotionImages(Minecraft mc, ClientSettings cfg, List<PotionEntry> entries, float x, float y) {
+        float scale = cfg.potionHudScale;
+        float iconSize = POTION_ICON_SIZE * scale;
+        float lineStep = iconSize + LINE_GAP * scale;
+        float timerScale = scale; // match the gen-timer numbers (full scale, not the smaller secondary)
+        float gap = POTION_ICON_TIMER_GAP * scale;
+
+        mc.getTextureManager().bindTexture(INVENTORY_TEXTURE);
+        GlStateManager.color(1f, 1f, 1f, 1f);
+        GlStateManager.enableTexture2D();
+        for (int i = 0; i < entries.size(); i++) {
+            PotionEntry entry = entries.get(i);
+            int idx = entry.potion.getStatusIconIndex();
+            if (idx < 0) continue;
+
+            GlStateManager.pushMatrix();
+            GlStateManager.translate(x, y + i * lineStep, 0f);
+            GlStateManager.scale(scale, scale, 1f);
+            Gui.drawModalRectWithCustomSizedTexture(0, 0, idx % 8 * 18, 198 + idx / 8 * 18, 18, 18, 256f, 256f);
+            GlStateManager.popMatrix();
+        }
+
+        FontRenderer fr = mc.fontRendererObj;
+        if (fr != null) {
+            for (int i = 0; i < entries.size(); i++) {
+                float ty = y + i * lineStep + (iconSize - TEXT_HEIGHT * timerScale) / 2f;
+                drawScaledString(fr, entries.get(i).timer, x + iconSize + gap, ty, timerScale);
+            }
+        }
+        resetGlState();
+    }
+
+    private static void drawArmorIcon(Minecraft mc, ClientSettings cfg, ItemStack stack, float x, float y) {
+        RenderItem renderItem = mc.getRenderItem();
+        if (renderItem == null) return;
+
+        GlStateManager.pushMatrix();
+        GlStateManager.enableDepth();
+        GlStateManager.enableRescaleNormal();
+        RenderHelper.enableGUIStandardItemLighting();
+        GlStateManager.translate(x, y, 0f);
+        GlStateManager.scale(cfg.armorHudScale, cfg.armorHudScale, 1f);
+        float prevZ = renderItem.zLevel;
+        renderItem.zLevel = 200f;
+        renderItem.renderItemIntoGUI(stack, 0, 0);
+        renderItem.zLevel = prevZ;
+        RenderHelper.disableStandardItemLighting();
+        GlStateManager.disableRescaleNormal();
+        GlStateManager.popMatrix();
+        resetGlState();
+    }
+
+    private static void drawScaledString(FontRenderer fr, String text, float x, float y, float scale) {
+        // Inter SemiBold via the baked atlas — HUD text reads clearly bold over the world.
+        BedwarsQolFont.draw(text, x, y, scale, TEXT_COLOR, false, BedwarsQolFont.Weight.BOLD);
+    }
+
+    private static Size potionSize(Minecraft mc, ClientSettings cfg, boolean example) {
+        if (cfg.hudDisplayMode == 1) {
+            List<PotionEntry> entries = potionEntries(mc, example);
+            if (entries.isEmpty()) return Size.EMPTY;
+
+            float maxTextWidth = 0f;
+            FontRenderer fr = mc.fontRendererObj;
+            if (fr != null) {
+                for (PotionEntry entry : entries) {
+                    maxTextWidth = Math.max(maxTextWidth, BedwarsQolFont.width(entry.timer) * cfg.potionHudScale);
+                }
+            }
+            float width = POTION_ICON_SIZE * cfg.potionHudScale + POTION_ICON_TIMER_GAP * cfg.potionHudScale + maxTextWidth;
+            float height = entries.size() * (POTION_ICON_SIZE * cfg.potionHudScale)
+                    + Math.max(0, entries.size() - 1) * (LINE_GAP * cfg.potionHudScale);
+            return new Size(width, height);
+        }
+
+        List<Line> lines = potionLines(mc, example);
+        return textSize(mc.fontRendererObj, lines, cfg.potionHudScale);
+    }
+
+    private static Size armorSize(Minecraft mc, ClientSettings cfg, boolean example) {
+        ItemStack leggings = currentLeggings(mc, example);
+        if (leggings == null) return Size.EMPTY;
+        if (cfg.hudDisplayMode == 1) {
+            float size = ARMOR_ICON_SIZE * cfg.armorHudScale;
+            return new Size(size, size);
+        }
+
+        String name = materialName(leggings.getItem());
+        if (name == null) return Size.EMPTY;
+        return textSize(mc.fontRendererObj, Collections.singletonList(new Line(name)), cfg.armorHudScale);
+    }
+
+    private static HudBox potionBox(Minecraft mc, ClientSettings cfg, boolean example) {
+        if (!cfg.potionStatusEnabled) return null;
+        if (cfg.potionInGameOnly && !bedwarsActive(example)) return null;
+        Size size = potionSize(mc, cfg, example);
+        if (size.width <= 0f || size.height <= 0f) return null;
+        ScaledResolution resolution = new ScaledResolution(mc);
+        float x = absoluteX(cfg.potionHudX, cfg.potionHudAnchor, size.width, resolution.getScaledWidth());
+        float y = absoluteY(cfg.potionHudY, cfg.potionHudAnchor, size.height, resolution.getScaledHeight());
+        return new HudBox(POTION_HUD, "Potion HUD", x, y, size.width, size.height);
+    }
+
+    private static HudBox armorBox(Minecraft mc, ClientSettings cfg, boolean example) {
+        if (!cfg.armorTypeEnabled) return null;
+        if (cfg.armorInGameOnly && !bedwarsActive(example)) return null;
+        Size size = armorSize(mc, cfg, example);
+        if (size.width <= 0f || size.height <= 0f) return null;
+        ScaledResolution resolution = new ScaledResolution(mc);
+        float x = absoluteX(cfg.armorHudX, cfg.armorHudAnchor, size.width, resolution.getScaledWidth());
+        float y = absoluteY(cfg.armorHudY, cfg.armorHudAnchor, size.height, resolution.getScaledHeight());
+        return new HudBox(ARMOR_HUD, "Armor HUD", x, y, size.width, size.height);
+    }
+
+    private static float absoluteX(float storedX, int anchor, float width, float screenWidth) {
+        int safeAnchor = Math.max(0, Math.min(8, anchor));
+        return storedX + ANCHOR_X[safeAnchor] * screenWidth - ANCHOR_X[safeAnchor] * width;
+    }
+
+    private static float absoluteY(float storedY, int anchor, float height, float screenHeight) {
+        int safeAnchor = Math.max(0, Math.min(8, anchor));
+        return storedY + ANCHOR_Y[safeAnchor] * screenHeight - ANCHOR_Y[safeAnchor] * height;
+    }
+
+    private static int anchorFor(float x, float y, float width, float height, float screenWidth, float screenHeight) {
+        float right = x + width;
+        float bottom = y + height;
+        if (x <= screenWidth / 3f && y <= screenHeight / 3f) return 0;
+        if (right >= screenWidth / 3f * 2f && y <= screenHeight / 3f) return 2;
+        if (x <= screenWidth / 3f && bottom >= screenHeight / 3f * 2f) return 6;
+        if (right >= screenWidth / 3f * 2f && bottom >= screenHeight / 3f * 2f) return 8;
+        if (y <= screenHeight / 3f) return 1;
+        if (x <= screenWidth / 3f) return 3;
+        if (right >= screenWidth / 3f * 2f) return 5;
+        if (bottom >= screenHeight / 3f * 2f) return 7;
+        return 4;
+    }
+
+    private static Size textSize(FontRenderer fr, List<Line> lines, float scale) {
+        if (fr == null || lines.isEmpty()) return Size.EMPTY;
+
+        float width = 0f;
+        for (Line line : lines) {
+            width = Math.max(width, lineWidth(fr, line) * scale);
+        }
+        float height = lines.size() * ((TEXT_HEIGHT + LINE_GAP) * scale) - LINE_GAP * scale;
+        return new Size(width, height);
+    }
+
+    private static List<Line> potionLines(Minecraft mc, boolean example) {
+        if (example) {
+            List<Line> out = new ArrayList<>(2);
+            out.add(new Line("Jump Boost I", "0:38"));
+            out.add(new Line("Speed II", "1:24"));
+            return out;
+        }
+
+        Collection<PotionEffect> active = mc.thePlayer.getActivePotionEffects();
+        if (active.isEmpty()) return Collections.emptyList();
+
+        List<Line> lines = new ArrayList<>(active.size());
+        for (PotionEffect eff : active) {
+            Potion potion = potionFor(eff);
+            if (potion == null) continue;
+            String name = StatCollector.translateToLocal(potion.getName());
+            String timer = eff.getIsPotionDurationMax() ? "**:**" : formatTimer(eff.getDuration());
+            lines.add(new Line(name + " " + romanNumeral(eff.getAmplifier()), timer));
+        }
+        lines.sort((a, b) -> Float.compare(lineWidth(mc.fontRendererObj, b), lineWidth(mc.fontRendererObj, a)));
+        return lines;
+    }
+
+    private static List<PotionEntry> potionEntries(Minecraft mc, boolean example) {
+        if (example) {
+            List<PotionEntry> out = new ArrayList<>(2);
+            out.add(new PotionEntry(Potion.jump, "0:38"));
+            out.add(new PotionEntry(Potion.moveSpeed, "1:24"));
+            return out;
+        }
+
+        Collection<PotionEffect> active = mc.thePlayer.getActivePotionEffects();
+        if (active.isEmpty()) return Collections.emptyList();
+
+        List<PotionEntry> entries = new ArrayList<>(active.size());
+        for (PotionEffect eff : active) {
+            Potion potion = potionFor(eff);
+            if (potion == null) continue;
+            String timer = eff.getIsPotionDurationMax() ? "**:**" : formatTimer(eff.getDuration());
+            entries.add(new PotionEntry(potion, timer));
+        }
+        return entries;
+    }
+
+    private static ItemStack currentLeggings(Minecraft mc, boolean example) {
+        if (example) return new ItemStack(Items.diamond_leggings);
+        ItemStack leggings = mc.thePlayer.inventory.armorInventory[1];
+        if (leggings == null) return null;
+        return materialName(leggings.getItem()) == null ? null : leggings;
+    }
+
+    private static Potion potionFor(PotionEffect eff) {
+        int id = eff.getPotionID();
+        if (id < 0 || id >= Potion.potionTypes.length) return null;
+        return Potion.potionTypes[id];
+    }
+
+    private static float lineWidth(FontRenderer fr, Line line) {
+        if (fr == null) return 0f;
+        float width = BedwarsQolFont.width(line.primary);
+        if (!line.secondary.isEmpty()) {
+            width += SECONDARY_GAP + BedwarsQolFont.width(line.secondary) * SECONDARY_SCALE;
+        }
+        return width;
+    }
+
+    private static String romanNumeral(int amplifier) {
+        int level = amplifier + 1;
+        if (level >= 1 && level <= 10) return ROMAN[level - 1];
+        return String.valueOf(level);
+    }
+
+    private static String formatTimer(int durationTicks) {
+        int seconds = durationTicks / 20;
+        if (seconds < 60) return seconds + "s";
+        return (seconds / 60) + ":" + String.format("%02d", seconds % 60);
+    }
+
+    private static String materialName(Item item) {
+        if (item == Items.iron_leggings) return "Iron";
+        if (item == Items.diamond_leggings) return "Diamond";
+        if (item == Items.golden_leggings) return "Gold";
+        if (item == Items.leather_leggings) return "Leather";
+        if (item == Items.chainmail_leggings) return "Chainmail";
+        return null;
+    }
+
+    // ----- BedWars HUDs (mini inventory, diamond/emerald timers w/ gen tier) -----
+
+    /** These overlays only make sense inside an active BedWars game; the edit preview bypasses it. */
+    private static boolean bedwarsActive(boolean example) {
+        return example || HypixelContext.isInActiveBedwarsGame();
+    }
+
+    private static HudBox inventoryBox(Minecraft mc, ClientSettings cfg, boolean example) {
+        if (!cfg.inventoryHudEnabled) return null; // works anywhere unless "In Game Only" is set
+        if (cfg.inventoryInGameOnly && !bedwarsActive(example)) return null;
+        float scale = cfg.inventoryHudScale;
+        float width = INV_COLS * INV_CELL * scale;
+        float height = INV_ROWS * INV_CELL * scale;
+        ScaledResolution r = new ScaledResolution(mc);
+        float x = absoluteX(cfg.inventoryHudX, cfg.inventoryHudAnchor, width, r.getScaledWidth());
+        float y = absoluteY(cfg.inventoryHudY, cfg.inventoryHudAnchor, height, r.getScaledHeight());
+        return new HudBox(INVENTORY_HUD, "Inventory", x, y, width, height);
+    }
+
+    private static void drawInventoryHud(Minecraft mc, ClientSettings cfg, boolean example) {
+        HudBox box = inventoryBox(mc, cfg, example);
+        if (box == null) return;
+        drawMiniInventory(mc, cfg, box.x, box.y, example);
+    }
+
+    private static void drawMiniInventory(Minecraft mc, ClientSettings cfg, float x, float y, boolean example) {
+        float scale = cfg.inventoryHudScale;
+        ItemStack[] slots = miniInventorySlots(mc, example);
+
+        // No cell backgrounds — just the item icons, so it stays low-key and doesn't block the view.
+        RenderItem ri = mc.getRenderItem();
+        FontRenderer fr = mc.fontRendererObj;
+        if (ri == null) return;
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(x, y, 0f);
+        GlStateManager.scale(scale, scale, 1f);
+        GlStateManager.enableDepth();
+        GlStateManager.enableRescaleNormal();
+        RenderHelper.enableGUIStandardItemLighting();
+        float prevZ = ri.zLevel;
+        ri.zLevel = 200f;
+        for (int i = 0; i < slots.length; i++) {
+            ItemStack stack = slots[i];
+            if (stack == null) continue;
+            int px = Math.round((i % INV_COLS) * INV_CELL) + 1;
+            int py = Math.round((i / INV_COLS) * INV_CELL) + 1;
+            ri.renderItemIntoGUI(stack, px, py);
+            if (fr != null) ri.renderItemOverlayIntoGUI(fr, stack, px, py, null);
+        }
+        ri.zLevel = prevZ;
+        RenderHelper.disableStandardItemLighting();
+        GlStateManager.disableRescaleNormal();
+        GlStateManager.popMatrix();
+        resetGlState();
+    }
+
+    /** The three storage rows of the inventory (main slots 9..35). The hotbar is excluded. */
+    private static ItemStack[] miniInventorySlots(Minecraft mc, boolean example) {
+        ItemStack[] out = new ItemStack[INV_COLS * INV_ROWS];
+        if (example || mc.thePlayer == null) {
+            out[0] = new ItemStack(Items.diamond_pickaxe);
+            out[1] = new ItemStack(Items.shears);
+            out[2] = new ItemStack(Items.bread, 6);
+            out[8] = new ItemStack(Items.arrow, 8);
+            out[9] = new ItemStack(Items.golden_apple, 2);
+            out[INV_COLS + 1] = new ItemStack(Items.iron_ingot, 32);
+            out[INV_COLS + 2] = new ItemStack(Items.gold_ingot, 16);
+            out[2 * INV_COLS] = new ItemStack(Items.diamond, 4);
+            return out;
+        }
+        ItemStack[] main = mc.thePlayer.inventory.mainInventory;
+        for (int i = 0; i < out.length; i++) {
+            out[i] = main[9 + i]; // skip the 9 hotbar slots
+        }
+        return out;
+    }
+
+    private static HudBox timerBox(Minecraft mc, ClientSettings cfg, boolean example, boolean diamond) {
+        boolean enabled = cfg.genTimersEnabled;
+        if (!enabled || !bedwarsActive(example)) return null;
+        float scale = diamond ? cfg.diamondTimerHudScale : cfg.emeraldTimerHudScale;
+        Size size = timerSize(mc, cfg, example, diamond);
+        if (size.width <= 0f || size.height <= 0f) return null;
+        ScaledResolution r = new ScaledResolution(mc);
+        int storedX = diamond ? cfg.diamondTimerHudX : cfg.emeraldTimerHudX;
+        int storedY = diamond ? cfg.diamondTimerHudY : cfg.emeraldTimerHudY;
+        int anchor = diamond ? cfg.diamondTimerHudAnchor : cfg.emeraldTimerHudAnchor;
+        float x = absoluteX(storedX, anchor, size.width, r.getScaledWidth());
+        float y = absoluteY(storedY, anchor, size.height, r.getScaledHeight());
+        return new HudBox(diamond ? DIAMOND_TIMER_HUD : EMERALD_TIMER_HUD,
+                diamond ? "Diamond Timer" : "Emerald Timer", x, y, size.width, size.height);
+    }
+
+    private static Size timerSize(Minecraft mc, ClientSettings cfg, boolean example, boolean diamond) {
+        float scale = diamond ? cfg.diamondTimerHudScale : cfg.emeraldTimerHudScale;
+        if (cfg.hudDisplayMode == 1) {
+            return iconCountsSize(mc, Collections.singletonList(timerEntry(example, diamond)), scale);
+        }
+        return textSize(mc.fontRendererObj, Collections.singletonList(timerLine(example, diamond)), scale);
+    }
+
+    private static void drawTimerHud(Minecraft mc, ClientSettings cfg, boolean example, boolean diamond) {
+        HudBox box = timerBox(mc, cfg, example, diamond);
+        if (box == null) return;
+        float scale = diamond ? cfg.diamondTimerHudScale : cfg.emeraldTimerHudScale;
+        if (cfg.hudDisplayMode == 1) {
+            drawIconCounts(mc, Collections.singletonList(timerEntry(example, diamond)), box.x, box.y, scale);
+        } else {
+            drawLines(mc.fontRendererObj, Collections.singletonList(timerLine(example, diamond)), box.x, box.y, scale);
+        }
+    }
+
+    private static IconCount timerEntry(boolean example, boolean diamond) {
+        return new IconCount(new ItemStack(diamond ? Items.diamond : Items.emerald), timerValue(example, diamond));
+    }
+
+    private static Line timerLine(boolean example, boolean diamond) {
+        return new Line(diamond ? "Diamond" : "Emerald", timerValue(example, diamond));
+    }
+
+    /** Tier numeral then countdown, e.g. "II 23s" — rendered to the right of the gem icon. */
+    private static String timerValue(boolean example, boolean diamond) {
+        if (example) return diamond ? "II 23s" : "I 47s";
+        int s = diamond ? GeneratorTracker.diamondSeconds() : GeneratorTracker.emeraldSeconds();
+        int tier = diamond ? GeneratorTracker.diamondTier() : GeneratorTracker.emeraldTier();
+        String time = s < 0 ? "--" : s + "s";
+        String numeral = tier >= 1 && tier <= ROMAN.length ? ROMAN[tier - 1] : "";
+        return numeral.isEmpty() ? time : numeral + " " + time;
+    }
+
+    // ----- Keystrokes (WASD + spacebar) -----
+
+    private static HudBox keystrokesBox(Minecraft mc, ClientSettings cfg, boolean example) {
+        if (!cfg.keystrokesEnabled) return null;
+        if (cfg.keystrokesInGameOnly && !bedwarsActive(example)) return null;
+        float scale = cfg.keystrokesHudScale;
+        float width = (3f * KS_UNIT + 2f * KS_GAP) * scale;
+        float height = (2f * KS_UNIT + 2f * KS_GAP + KS_SPACE_H) * scale;
+        ScaledResolution r = new ScaledResolution(mc);
+        float x = absoluteX(cfg.keystrokesHudX, cfg.keystrokesHudAnchor, width, r.getScaledWidth());
+        float y = absoluteY(cfg.keystrokesHudY, cfg.keystrokesHudAnchor, height, r.getScaledHeight());
+        return new HudBox(KEYSTROKES_HUD, "Keystrokes", x, y, width, height);
+    }
+
+    private static void drawKeystrokesHud(Minecraft mc, ClientSettings cfg, boolean example) {
+        HudBox box = keystrokesBox(mc, cfg, example);
+        if (box == null) return;
+        boolean[] st = keyStates(mc, example);
+
+        // Draw everything in local (unscaled) coordinates under one translate+scale, so the caps and
+        // letters scale together through the modelview matrix.
+        GlStateManager.pushMatrix();
+        GlStateManager.translate(box.x, box.y, 0f);
+        GlStateManager.scale(cfg.keystrokesHudScale, cfg.keystrokesHudScale, 1f);
+
+        float col = KS_UNIT + KS_GAP;
+        float row2 = KS_UNIT + KS_GAP;
+        float row3 = row2 + KS_UNIT + KS_GAP;
+        drawKeyCap(col, 0f, KS_UNIT, KS_UNIT, "W", st[0]);
+        drawKeyCap(0f, row2, KS_UNIT, KS_UNIT, "A", st[1]);
+        drawKeyCap(col, row2, KS_UNIT, KS_UNIT, "S", st[2]);
+        drawKeyCap(2f * col, row2, KS_UNIT, KS_UNIT, "D", st[3]);
+        float spaceW = 3f * KS_UNIT + 2f * KS_GAP;
+        drawKeyCap(0f, row3, spaceW, KS_SPACE_H, "", st[4]);
+        drawSpaceSymbol(0f, row3, spaceW, KS_SPACE_H, st[4]);
+
+        GlStateManager.popMatrix();
+        resetGlState();
+    }
+
+    private static void drawKeyCap(float x, float y, float w, float h, String label, boolean pressed) {
+        float radius = Math.min(3f, Math.min(w, h) * 0.25f);
+        GuiRender.roundedRect(x, y, x + w, y + h, radius, pressed ? KS_FILL_ON : KS_FILL_OFF);
+        if (!label.isEmpty()) {
+            float tw = BedwarsQolFont.width(label, KS_LETTER, BedwarsQolFont.Weight.BOLD);
+            float tx = x + (w - tw) / 2f;
+            float ty = y + (h - BedwarsQolFont.height(KS_LETTER)) / 2f;
+            BedwarsQolFont.draw(label, tx, ty, KS_LETTER, pressed ? KS_TEXT_ON : KS_TEXT_OFF, false, BedwarsQolFont.Weight.BOLD);
+        }
+    }
+
+    /** A centered horizontal bar standing in for the space key's label. */
+    private static void drawSpaceSymbol(float x, float y, float w, float h, boolean pressed) {
+        float barW = w * 0.34f;
+        float barH = Math.max(1f, h * 0.08f);
+        float bx1 = x + (w - barW) / 2f;
+        float by1 = y + (h - barH) / 2f;
+        GuiRender.roundedRect(bx1, by1, bx1 + barW, by1 + barH, barH / 2f, pressed ? KS_TEXT_ON : KS_TEXT_OFF);
+    }
+
+    /** {W, A, S, D, Space} held state, following the player's actual movement binds. */
+    private static boolean[] keyStates(Minecraft mc, boolean example) {
+        if (example || mc.gameSettings == null) return new boolean[]{true, false, false, false, false};
+        return new boolean[]{
+                isDown(mc.gameSettings.keyBindForward),
+                isDown(mc.gameSettings.keyBindLeft),
+                isDown(mc.gameSettings.keyBindBack),
+                isDown(mc.gameSettings.keyBindRight),
+                isDown(mc.gameSettings.keyBindJump)};
+    }
+
+    private static boolean isDown(KeyBinding kb) {
+        return kb != null && kb.isKeyDown();
+    }
+
+    private static void drawIconCounts(Minecraft mc, List<IconCount> entries, float x, float y, float scale) {
+        if (entries.isEmpty()) return;
+        RenderItem ri = mc.getRenderItem();
+        float iconSize = ARMOR_ICON_SIZE * scale;
+        float lineStep = iconSize + LINE_GAP * scale;
+        float gap = POTION_ICON_TIMER_GAP * scale;
+
+        if (ri != null) {
+            GlStateManager.pushMatrix();
+            GlStateManager.enableDepth();
+            GlStateManager.enableRescaleNormal();
+            RenderHelper.enableGUIStandardItemLighting();
+            float prevZ = ri.zLevel;
+            ri.zLevel = 200f;
+            for (int i = 0; i < entries.size(); i++) {
+                GlStateManager.pushMatrix();
+                GlStateManager.translate(x, y + i * lineStep, 0f);
+                GlStateManager.scale(scale, scale, 1f);
+                ri.renderItemIntoGUI(entries.get(i).stack, 0, 0);
+                GlStateManager.popMatrix();
+            }
+            ri.zLevel = prevZ;
+            RenderHelper.disableStandardItemLighting();
+            GlStateManager.disableRescaleNormal();
+            GlStateManager.popMatrix();
+            resetGlState();
+        }
+
+        FontRenderer fr = mc.fontRendererObj;
+        if (fr != null) {
+            for (int i = 0; i < entries.size(); i++) {
+                String count = entries.get(i).count;
+                if (count.isEmpty()) continue;
+                float ty = y + i * lineStep + (iconSize - TEXT_HEIGHT * scale) / 2f;
+                drawScaledString(fr, count, x + iconSize + gap, ty, scale);
+            }
+        }
+    }
+
+    private static Size iconCountsSize(Minecraft mc, List<IconCount> entries, float scale) {
+        if (entries.isEmpty()) return Size.EMPTY;
+        float iconSize = ARMOR_ICON_SIZE * scale;
+        float gap = POTION_ICON_TIMER_GAP * scale;
+        float maxText = 0f;
+        FontRenderer fr = mc.fontRendererObj;
+        if (fr != null) {
+            for (IconCount e : entries) {
+                if (!e.count.isEmpty()) maxText = Math.max(maxText, BedwarsQolFont.width(e.count) * scale);
+            }
+        }
+        float width = iconSize + (maxText > 0f ? gap + maxText : 0f);
+        float height = entries.size() * iconSize + Math.max(0, entries.size() - 1) * (LINE_GAP * scale);
+        return new Size(width, height);
+    }
+
+    private static void resetGlState() {
+        GlStateManager.color(1f, 1f, 1f, 1f);
+        GlStateManager.enableTexture2D();
+        GlStateManager.enableBlend();
+        GlStateManager.disableLighting();
+    }
+
+    public static final class HudBox {
+        public final String id;
+        public final String title;
+        public final float x;
+        public final float y;
+        public final float width;
+        public final float height;
+
+        public HudBox(String id, String title, float x, float y, float width, float height) {
+            this.id = id;
+            this.title = title;
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+        }
+
+        public float right() {
+            return x + width;
+        }
+
+        public float bottom() {
+            return y + height;
+        }
+
+        public float centerX() {
+            return x + width / 2f;
+        }
+
+        public float centerY() {
+            return y + height / 2f;
+        }
+
+        public boolean contains(float px, float py) {
+            return px >= x && px <= right() && py >= y && py <= bottom();
+        }
+    }
+
+    private static final class Size {
+        static final Size EMPTY = new Size(0f, 0f);
+
+        final float width;
+        final float height;
+
+        Size(float width, float height) {
+            this.width = width;
+            this.height = height;
+        }
+    }
+
+    private static final class Line {
+        final String primary;
+        final String secondary;
+
+        Line(String primary) {
+            this(primary, "");
+        }
+
+        Line(String primary, String secondary) {
+            this.primary = primary;
+            this.secondary = secondary == null ? "" : secondary;
+        }
+    }
+
+    private static final class PotionEntry {
+        final Potion potion;
+        final String timer;
+
+        PotionEntry(Potion potion, String timer) {
+            this.potion = potion;
+            this.timer = timer;
+        }
+    }
+
+    private static final class IconCount {
+        final ItemStack stack;
+        final String count;
+
+        IconCount(ItemStack stack, String count) {
+            this.stack = stack;
+            this.count = count == null ? "" : count;
+        }
+    }
+}

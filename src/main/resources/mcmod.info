@@ -1,0 +1,18 @@
+[
+  {
+    "modid": "${id}",
+    "name": "${name}",
+    "description": "Hypixel BedWars quality-of-life mod for Forge 1.8.9: HUD, settings GUI, numeric tab ping, and opt-in Hypixel stats.",
+    "version": "${version}",
+    "mcversion": "${mcVersionStr}",
+    "url": "https://github.com/MrCobbert/bedwarsQOL",
+    "updateUrl": "",
+    "authorList": [
+      "MrCobbert"
+    ],
+    "credits": "Tabler Icons (MIT); Inter font (SIL OFL).",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+  }
+]

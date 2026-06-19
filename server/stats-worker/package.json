@@ -1,0 +1,16 @@
+{
+  "name": "bedwarsqol-stats-worker",
+  "private": true,
+  "version": "0.1.0",
+  "description": "BedwarsQOL stats backend: a Cloudflare Worker that serves Hypixel BedWars stats to the mod.",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev --remote",
+    "test:local": "node scripts/run-local-probes.mjs",
+    "test:worker": "node scripts/run-worker-probe.mjs",
+    "deploy-and-test": "bash scripts/deploy-and-test.sh"
+  },
+  "devDependencies": {
+    "wrangler": "^4.14.0"
+  }
+}
