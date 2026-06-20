@@ -1,6 +1,7 @@
 package com.bedwarsqol.mixin;
 
 import com.bedwarsqol.BedwarsQol;
+import com.bedwarsqol.stats.HypixelContext;
 import com.bedwarsqol.stats.TabListLookup;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.FontRenderer;
@@ -96,6 +97,16 @@ public abstract class GuiPlayerTabOverlayMixin {
         return BedwarsQol.config == null || BedwarsQol.config.tabNumericPing;
     }
 
+    /**
+     * True while in an active Bedwars game, where Hypixel masks every player's ping to a flat 1ms — so
+     * any ping readout (numeric value or the vanilla signal bars) is meaningless. We hide the ping
+     * element entirely there and give the freed width to names/stats; in lobbies and queues ping is
+     * real, so it renders as normal.
+     */
+    private static boolean bedwarsqol$hidePing() {
+        return HypixelContext.isInActiveBedwarsGame();
+    }
+
     private static String bedwarsqol$pingText(int ping) {
         return ping < 0 ? "?" : ping + "ms";
     }
@@ -103,7 +114,10 @@ public abstract class GuiPlayerTabOverlayMixin {
     /** Width (px) the right-hand zone needs for one player: ping value (or vanilla bar) + stats overlay. */
     private static int bedwarsqol$rightReserveFor(FontRenderer fr, NetworkPlayerInfo info, boolean pingOn) {
         // Ping value + 1px right margin + 2px gap before the stats; or vanilla's 13px bar reserve when off.
-        int reserve = pingOn ? fr.getStringWidth(bedwarsqol$pingText(info.getResponseTime())) + 3 : VANILLA_PING_RESERVE;
+        // In an active game the ping element is hidden entirely, so it reserves nothing — only the stats do.
+        int reserve = bedwarsqol$hidePing()
+                ? 0
+                : (pingOn ? fr.getStringWidth(bedwarsqol$pingText(info.getResponseTime())) + 3 : VANILLA_PING_RESERVE);
         String stats = TabListLookup.statsTextForPlayerInfo(info);
         if (stats != null && !stats.isEmpty()) {
             // Scaled stats width + 2px gap to the score column + 2px safety.
@@ -252,7 +266,8 @@ public abstract class GuiPlayerTabOverlayMixin {
         Minecraft mc = Minecraft.getMinecraft();
         FontRenderer fr = mc.fontRendererObj;
 
-        boolean pingOn = bedwarsqol$pingEnabled();
+        boolean hidePing = bedwarsqol$hidePing();
+        boolean pingOn = !hidePing && bedwarsqol$pingEnabled();
         int cellRight = x + slotWidth;
         // Left edge of the ping element — the stats overlay is right-aligned just to its left.
         int rightEdge;
@@ -262,8 +277,12 @@ public abstract class GuiPlayerTabOverlayMixin {
             int pingX = cellRight - 1 - fr.getStringWidth(ms);
             fr.drawStringWithShadow(ms, (float) pingX, (float) y, bedwarsqol$pingColor(ping));
             rightEdge = pingX - 2;
+        } else if (hidePing) {
+            // In-game: Hypixel masks ping to 1ms, so draw nothing (and cancel vanilla's bars below). The
+            // stats overlay reclaims the full right margin.
+            rightEdge = cellRight - 1;
         } else {
-            // Numeric ping off: vanilla draws its bar icon at cellRight - 11 (10px wide); stop left of it.
+            // Numeric ping off (lobby): vanilla draws its bar icon at cellRight - 11 (10px wide); stop left of it.
             rightEdge = cellRight - 11 - 2;
         }
 
@@ -284,7 +303,8 @@ public abstract class GuiPlayerTabOverlayMixin {
             GlStateManager.popMatrix();
         }
 
-        // Only suppress vanilla's bars when we've drawn the numeric ping in their place.
-        if (pingOn) ci.cancel();
+        // Suppress vanilla's bars whenever we've taken over the ping slot: numeric ping drawn in their
+        // place, or the ping hidden entirely in-game.
+        if (pingOn || hidePing) ci.cancel();
     }
 }
