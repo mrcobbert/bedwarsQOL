@@ -10,6 +10,7 @@
     "GuiIngameMixin",
     "MinecraftEscMixin",
     "GuiPlayerTabOverlayMixin",
+    "GuiScreenMixin",
     "NetHandlerPlayClientMixin",
     "ItemRendererMixin"
   ],

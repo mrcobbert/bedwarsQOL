@@ -42,6 +42,7 @@ public class SettingsGui extends GuiScreen {
     private static final int K_SWEATREPORT = 28;
     private static final int K_TAB_HEADERFOOTER = 44;
     private static final int K_TAB_PING = 52;
+    private static final int K_CHATHOVER = 53;
     private static final int K_SCOREBOARD_SIZE = 46, K_STYLEDTAB_SIZE = 47;
     private static final int K_SUPPRESSESC = 48;
     private static final int K_DUMMY = 49, K_DUMMY_KEY = 50, K_DUMMY_CLEAR = 51;
@@ -159,6 +160,7 @@ public class SettingsGui extends GuiScreen {
                     new RowDef(RowType.TOGGLE, "Hypixel Stats", "Players' BedWars stats on screen", K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Nametag", K_NAMETAG, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Tab", K_TAB, null, K_STATS),
+                    new RowDef(RowType.TOGGLE, "Chat Hover", K_CHATHOVER, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Level", K_LEVEL, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Rank", K_RANK, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Party Report", K_SWEATREPORT, null, K_STATS)),
@@ -1319,6 +1321,7 @@ public class SettingsGui extends GuiScreen {
             case K_STATS: return cfg.playerStats;
             case K_NAMETAG: return cfg.playerStatsNametag;
             case K_TAB: return cfg.playerStatsTab;
+            case K_CHATHOVER: return cfg.playerStatsChatHover;
             case K_LEVEL: return cfg.playerStatsShowLevel;
             case K_RANK: return cfg.playerStatsShowRank;
             case K_SWEATREPORT: return cfg.statsSweatReport;
@@ -1349,6 +1352,7 @@ public class SettingsGui extends GuiScreen {
             case K_STATS: cfg.playerStats = !cfg.playerStats; break;
             case K_NAMETAG: cfg.playerStatsNametag = !cfg.playerStatsNametag; break;
             case K_TAB: cfg.playerStatsTab = !cfg.playerStatsTab; break;
+            case K_CHATHOVER: cfg.playerStatsChatHover = !cfg.playerStatsChatHover; break;
             case K_LEVEL: cfg.playerStatsShowLevel = !cfg.playerStatsShowLevel; break;
             case K_RANK: cfg.playerStatsShowRank = !cfg.playerStatsShowRank; break;
             case K_SWEATREPORT: cfg.statsSweatReport = !cfg.statsSweatReport; break;

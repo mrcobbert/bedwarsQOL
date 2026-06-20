@@ -148,6 +148,30 @@ public final class BedwarsStats {
         return sb.toString();
     }
 
+    /**
+     * Multi-line stat block for the chat hover card. Returns the lines to append under Hypixel's own
+     * rank tooltip; empty when there is nothing useful to show (a transient fetch error), so the caller
+     * can fall back to the vanilla card alone.
+     */
+    public java.util.List<String> formatForHoverCard(BedwarsMode mode, boolean showLevel, boolean showRank) {
+        java.util.List<String> out = new java.util.ArrayList<String>();
+        switch (state) {
+            case NICKED:       out.add("§6§lBedWars §r§8(nicked / not found)"); return out;
+            case NEVER_PLAYED: out.add("§6§lBedWars §r§8(never played)");       return out;
+            case ERROR:        return out; // empty -> caller keeps the vanilla card and retries later
+            default: break;
+        }
+        ModeStats m = statsFor(mode);
+        StringBuilder header = new StringBuilder("§6§lBedWars");
+        if (showLevel && networkLevel > 0) header.append(" §r§7[").append(networkLevel).append("]");
+        if (showRank && !rankPrefix.isEmpty()) header.append(" §r").append(rankPrefix);
+        out.add(header.toString());
+        out.add("§7FKDR: " + fkdrColor(m.fkdr) + fmt2(m.fkdr) + " §r§8| §7Finals: §f" + num(m.finalKills) + "§7/§f" + num(m.finalDeaths));
+        out.add("§7WLR: §f" + fmt2(m.wlr) + " §8| §7W/L: §f" + num(m.wins) + "§7/§f" + num(m.losses));
+        out.add("§7K/D: §f" + fmt2(m.kd) + " §8| §7Kills: §f" + num(m.kills));
+        return out;
+    }
+
     /** The bracketed label for non-OK states (or null when stats should render). */
     private String specialLabel() {
         switch (state) {
@@ -177,5 +201,9 @@ public final class BedwarsStats {
 
     private static String fmt2(double d) {
         return String.format(java.util.Locale.US, "%.2f", d);
+    }
+
+    private static String num(int n) {
+        return String.format(java.util.Locale.US, "%,d", n);
     }
 }

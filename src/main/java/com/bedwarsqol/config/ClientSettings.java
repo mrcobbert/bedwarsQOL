@@ -68,6 +68,8 @@ public class ClientSettings {
     public boolean playerStatsTab = true;
     public boolean playerStatsShowLevel = true;
     public boolean playerStatsShowRank = true;
+    /** Hovering a player's name in chat appends their BedWars stats to the hover card (lobby/queue/game). */
+    public boolean playerStatsChatHover = true;
     /** When in an active Bedwars game, broadcast the sweatiest enemy teams to party chat once. */
     public boolean statsSweatReport = false;
 
