@@ -112,8 +112,14 @@ public final class SweatReport {
         // Teams aren't colored yet (scoreboard still populating) — wait unless we've timed out.
         if (enemies.isEmpty() && !timedOut) return;
 
-        // 5. Wait until every enemy we'd report on has resolved (or we time out).
+        // 5. Wait until every player we'd report on — enemies AND our own team — has resolved (or we
+        //    time out). Gating teammates too stops the report firing with our own side still showing
+        //    "?" in chat while the live tab list already has them (the tab re-renders every frame; this
+        //    report is a one-shot snapshot). Terminal states (OK/NICKED/NEVER_PLAYED) all count as
+        //    resolved, so a nicked teammate doesn't stall — and MAX_WAIT_MS is the escape hatch for one
+        //    that never resolves, after which it just shows "?" and is skipped in the average.
         int resolved = 0;
+        int needed = enemies.size() + team.size();
         for (NetworkPlayerInfo info : enemies) {
             UUID id = info.getGameProfile().getId();
             if (StatsCache.getCached(id) != null) {
@@ -122,20 +128,22 @@ public final class SweatReport {
                 StatsCache.ensureFetched(id, StatsCache.PRIORITY_TAB);
             }
         }
-        // Nudge own-team fetches alongside (best-effort, never gated — a nicked teammate must not
-        // stall the report; unresolved teammates just show "?" and are skipped in the average).
         for (NetworkPlayerInfo info : team) {
             UUID id = info.getGameProfile().getId();
-            if (StatsCache.getCached(id) == null) StatsCache.ensureFetched(id, StatsCache.PRIORITY_TAB);
+            if (StatsCache.getCached(id) != null) {
+                resolved++;
+            } else {
+                StatsCache.ensureFetched(id, StatsCache.PRIORITY_TAB);
+            }
         }
-        if (resolved < enemies.size() && !timedOut) return;
+        if (resolved < needed && !timedOut) return;
 
         // 6. Fire once.
         sent = true;
         List<String> lines = buildLines(enemies, team, board, myColor);
         if (DEBUG) {
             System.out.println("[BedwarsQol][SweatReport] fired: " + lines.size() + " team line(s), "
-                    + resolved + "/" + enemies.size() + " enemies resolved, timedOut=" + timedOut);
+                    + resolved + "/" + needed + " players resolved, timedOut=" + timedOut);
             local(mc, lines.isEmpty()
                     ? "§8[Sweat] §7No teams detected."
                     : "§8[Sweat] §7Sent report to party.");
