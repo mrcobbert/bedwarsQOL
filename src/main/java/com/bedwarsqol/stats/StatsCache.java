@@ -95,7 +95,16 @@ public final class StatsCache {
 
     public static BedwarsStats getCached(UUID uuid) {
         if (uuid == null) return null;
-        String k = uuid.toString();
+        return getCachedByKey(uuid.toString());
+    }
+
+    /** Stats cached under a bare player name, for players with no resolvable tab-list UUID. */
+    public static BedwarsStats getCachedByName(String name) {
+        if (name == null || name.isEmpty()) return null;
+        return getCachedByKey(nameKey(name));
+    }
+
+    private static BedwarsStats getCachedByKey(String k) {
         Entry e = CACHE.get(k);
         if (e == null) return null;
         if (System.currentTimeMillis() - e.timestamp > ttlFor(e.stats.state)) {
@@ -103,6 +112,11 @@ public final class StatsCache {
             return null;
         }
         return e.stats;
+    }
+
+    /** Cache key for a name-only lookup, namespaced so it can't collide with a UUID key. */
+    private static String nameKey(String name) {
+        return "name:" + name.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     public static void ensureFetched(UUID uuid, int priority) {
@@ -118,6 +132,23 @@ public final class StatsCache {
             return;
         }
         QUEUE.add(new Task(k, uuid, playerName, priority, SEQ.incrementAndGet()));
+    }
+
+    /**
+     * Queue a fetch keyed by player name, for players whose UUID isn't in your tab list (nicks, and
+     * party/guild members in another lobby). The result is cached under the name, not a UUID.
+     */
+    public static void ensureFetchedByName(String name, int priority) {
+        if (name == null || name.isEmpty()) return;
+        if (!useBackend()) return;
+        String key = nameKey(name);
+        if (getCachedByKey(key) != null) return;
+        if (!QUEUED.add(key)) return;
+        if (QUEUE.size() >= MAX_QUEUE) {
+            QUEUED.remove(key);
+            return;
+        }
+        QUEUE.add(new Task(key, null, name.trim(), priority, SEQ.incrementAndGet()));
     }
 
     /**
@@ -167,7 +198,7 @@ public final class StatsCache {
             QUEUED.remove(t.key);
 
             try {
-                if (getCached(t.uuid) != null) continue;
+                if (getCachedByKey(t.key) != null) continue;
                 if (!useBackend()) continue;
                 if (!LIMITER.canRequest()) continue;
                 LIMITER.awaitSlot();
