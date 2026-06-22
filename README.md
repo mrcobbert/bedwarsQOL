@@ -13,41 +13,21 @@ policy — no automation of player actions, no unfair advantages.
 3. Drop it into your instance's `mods/` folder.
 4. Launch the game. Press **Right Shift** (or run `/bedwarsqol`) to open the settings (bind can be changed in minecraft settings).
 
-**NOTE:** If ypu want Stats and AntiSnipe features — see below, there a bit more setup.
+**NOTE:** Stats and AntiSnipe need a one-time backend setup — see below (~5 minutes).
 
 ## Optional: enable Hypixel stats
 
-If you want Hypixel stats you must create a Cloudflare account, this is free/private and also easy. You must do this because stats and flags are served by a tiny **Cloudflare Worker that you self-host**.
+Hypixel stats are served by a tiny **Cloudflare Worker you self-host** (free, private). Use the installer.
 
-## Instructions (5-10 minutes depending on how technical you are)
+1. Run the installer for your OS (clone/download this repo, or get it from [**Releases**](../../releases/latest)):
+   - **Windows:** double-click [`installers/setup-windows.bat`](installers/setup-windows.bat)
+   - **Mac:** double-click [`installers/setup-mac.command`](installers/setup-mac.command)
 
-1. Install [Node.js](https://nodejs.org), then do this:
+2. Follow the prompts. A browser opens to log in or sign up for Cloudflare (free). The script deploys the Worker and copies a command to your clipboard.
 
-   ```sh
-   git clone https://github.com/MrCobbert/bedwarsqol.git
-   cd bedwarsqol/server/stats-worker
-   npm install
-   npx wrangler login        # opens a browser to authorize your Cloudflare account
-   npx wrangler deploy
-   ```
+3. In Minecraft, paste the command into chat, then enable **Hypixel Stats** in the mod GUI (Right Shift).
 
-   `wrangler deploy` prints your Worker URL, e.g. `https://bedwarsqol-stats.<your-subdomain>.workers.dev`.
-
-2. **(Optional) Require a token** so only your client can use the Worker: 
-
-   ```sh
-   npx wrangler secret put STATS_TOKEN      # paste any random string/password
-   ```
-
-3. In Minecraft:
-
-```
-/bedwarsqol statsurl https://bedwarsqol-stats.<your-subdomain>.workers.dev # the url it printed after you did wranger deploy
-/bedwarsqol statstoken <token>     # only if you set the optional STATS_TOKEN above
-```
-
-That's **it**.
-Now you can enable **Hypixel Stats** in the GUI (Hypixel Stats section).
+That's it.
 
 ## Features: BedwarsQOL — Features
 
