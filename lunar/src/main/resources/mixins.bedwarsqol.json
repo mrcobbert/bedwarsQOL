@@ -1,0 +1,19 @@
+{
+  "compatibilityLevel": "JAVA_8",
+  "minVersion": "0.8",
+  "package": "com.bedwarsqol.mixin",
+  "injectors": {
+    "maxShiftBy": 5
+  },
+  "client": [
+    "GuiIngameMixin",
+    "MinecraftEscMixin",
+    "GuiPlayerTabOverlayMixin",
+    "GuiChatMixin",
+    "GuiScreenMixin",
+    "NetHandlerPlayClientMixin",
+    "ItemRendererMixin",
+    "RenderGlobalMixin"
+  ],
+  "verbose": true
+}

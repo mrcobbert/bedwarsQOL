@@ -1,0 +1,148 @@
+package com.bedwarsqol.feature;
+
+import com.bedwarsqol.BedwarsQol;
+import net.minecraft.block.Block;
+import net.minecraft.block.material.Material;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.client.renderer.GlStateManager;
+import net.minecraft.client.renderer.RenderGlobal;
+import net.minecraft.client.renderer.Tessellator;
+import net.minecraft.client.renderer.WorldRenderer;
+import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.util.AxisAlignedBB;
+import net.minecraft.util.BlockPos;
+import net.minecraft.util.MovingObjectPosition;
+import net.minecraft.world.World;
+import org.lwjgl.opengl.GL11;
+
+/**
+ * Replaces the vanilla black block-selection outline with a custom, configurable highlight on the
+ * block the player is looking at. Configurable color/opacity, draw style (outline / fill / both) and
+ * an optional see-through (depth-disabled) mode.
+ *
+ * <p>Under Weave there is no {@code DrawBlockHighlightEvent}; instead {@code mixin/RenderGlobalMixin}
+ * injects the HEAD of {@link RenderGlobal#drawSelectionBox} and calls {@link #render} — which draws our
+ * replacement in world space and returns {@code true} so the mixin cancels the vanilla outline. This
+ * renders while the camera modelview is active, so the block's world-space {@link AxisAlignedBB} is
+ * offset by the interpolated camera eye (anti-jitter) and drawn directly.
+ */
+public class BlockOverlayRenderer {
+
+    /** Vanilla's selection-box inflation so the highlight sits just outside the block faces. */
+    private static final double EXPAND = 0.0020000000949949026D;
+
+    /**
+     * Draws the custom highlight for the block under {@code target}.
+     *
+     * @return {@code true} if we drew our own highlight (caller should cancel the vanilla outline),
+     *         {@code false} to leave the vanilla outline alone.
+     */
+    public static boolean render(EntityPlayer player, MovingObjectPosition target, float partialTicks) {
+        if (BedwarsQol.config == null || !BedwarsQol.config.blockOverlayEnabled) return false;
+        if (target == null || target.typeOfHit != MovingObjectPosition.MovingObjectType.BLOCK) return false;
+        if (player == null) return false;
+        World world = player.worldObj;
+        if (world == null) return false;
+
+        BlockPos pos = target.getBlockPos();
+        if (pos == null) return false;
+
+        IBlockState state = world.getBlockState(pos);
+        Block block = state.getBlock();
+        if (block.getMaterial() == Material.air) return false;
+
+        // World-space selection box for this block, slightly inflated like vanilla.
+        block.setBlockBoundsBasedOnState(world, pos);
+        AxisAlignedBB box = block.getSelectedBoundingBox(world, pos).expand(EXPAND, EXPAND, EXPAND);
+
+        // Interpolated camera eye (anti-jitter): shift the world-space box into camera-relative space,
+        // matching how vanilla RenderGlobal.drawSelectionBox subtracts the interpolated eye.
+        double eyeX = player.lastTickPosX + (player.posX - player.lastTickPosX) * partialTicks;
+        double eyeY = player.lastTickPosY + (player.posY - player.lastTickPosY) * partialTicks;
+        double eyeZ = player.lastTickPosZ + (player.posZ - player.lastTickPosZ) * partialTicks;
+        AxisAlignedBB aabb = box.offset(-eyeX, -eyeY, -eyeZ);
+
+        int style = BedwarsQol.config.blockOverlayStyle; // 0 = outline, 1 = fill, 2 = both
+        int color = BedwarsQol.config.blockOverlayColor; // ARGB
+        int a = (color >>> 24) & 0xFF;
+        int r = (color >> 16) & 0xFF;
+        int g = (color >> 8) & 0xFF;
+        int b = color & 0xFF;
+
+        // ---- GL setup (mirrors NametagStats: blend on, texturing off, depth-write off) ----
+        GlStateManager.enableBlend();
+        GlStateManager.tryBlendFuncSeparate(770, 771, 1, 0); // SRC_ALPHA, ONE_MINUS_SRC_ALPHA
+        GlStateManager.disableTexture2D();
+        GlStateManager.depthMask(false);
+        boolean seeThrough = BedwarsQol.config.blockOverlaySeeThrough;
+        if (seeThrough) GlStateManager.disableDepth();
+
+        // ---- FILL (style 1 = fill-only, style 2 = both) ----
+        if (style == 1 || style == 2) {
+            // For "both", dim the fill so the outline still reads on top of it.
+            float fillA = (style == 2 ? a * 0.35f : (float) a) / 255f;
+            drawFilledBox(aabb, r / 255f, g / 255f, b / 255f, fillA);
+        }
+
+        // ---- OUTLINE (style 0 = outline-only, style 2 = both) ----
+        if (style == 0 || style == 2) {
+            GL11.glLineWidth(BedwarsQol.config.blockOverlayLineWidth);
+            RenderGlobal.drawOutlinedBoundingBox(aabb, r, g, b, a);
+        }
+
+        // ---- restore GL state ----
+        if (seeThrough) GlStateManager.enableDepth();
+        GlStateManager.depthMask(true);
+        GlStateManager.enableTexture2D();
+        GlStateManager.disableBlend();
+        GL11.glLineWidth(1.0F);
+        GlStateManager.color(1f, 1f, 1f, 1f);
+        return true;
+    }
+
+    /** Six translucent {@code POSITION_COLOR} quads covering every face of {@code aabb}. */
+    private static void drawFilledBox(AxisAlignedBB aabb, float r, float g, float b, float a) {
+        GlStateManager.disableCull(); // both faces of each quad must show regardless of winding
+        Tessellator tess = Tessellator.getInstance();
+        WorldRenderer wr = tess.getWorldRenderer();
+        wr.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_COLOR);
+
+        double x0 = aabb.minX, y0 = aabb.minY, z0 = aabb.minZ;
+        double x1 = aabb.maxX, y1 = aabb.maxY, z1 = aabb.maxZ;
+
+        // bottom (y = y0)
+        wr.pos(x0, y0, z0).color(r, g, b, a).endVertex();
+        wr.pos(x1, y0, z0).color(r, g, b, a).endVertex();
+        wr.pos(x1, y0, z1).color(r, g, b, a).endVertex();
+        wr.pos(x0, y0, z1).color(r, g, b, a).endVertex();
+        // top (y = y1)
+        wr.pos(x0, y1, z0).color(r, g, b, a).endVertex();
+        wr.pos(x0, y1, z1).color(r, g, b, a).endVertex();
+        wr.pos(x1, y1, z1).color(r, g, b, a).endVertex();
+        wr.pos(x1, y1, z0).color(r, g, b, a).endVertex();
+        // north (z = z0)
+        wr.pos(x0, y0, z0).color(r, g, b, a).endVertex();
+        wr.pos(x0, y1, z0).color(r, g, b, a).endVertex();
+        wr.pos(x1, y1, z0).color(r, g, b, a).endVertex();
+        wr.pos(x1, y0, z0).color(r, g, b, a).endVertex();
+        // south (z = z1)
+        wr.pos(x0, y0, z1).color(r, g, b, a).endVertex();
+        wr.pos(x1, y0, z1).color(r, g, b, a).endVertex();
+        wr.pos(x1, y1, z1).color(r, g, b, a).endVertex();
+        wr.pos(x0, y1, z1).color(r, g, b, a).endVertex();
+        // west (x = x0)
+        wr.pos(x0, y0, z0).color(r, g, b, a).endVertex();
+        wr.pos(x0, y0, z1).color(r, g, b, a).endVertex();
+        wr.pos(x0, y1, z1).color(r, g, b, a).endVertex();
+        wr.pos(x0, y1, z0).color(r, g, b, a).endVertex();
+        // east (x = x1)
+        wr.pos(x1, y0, z0).color(r, g, b, a).endVertex();
+        wr.pos(x1, y1, z0).color(r, g, b, a).endVertex();
+        wr.pos(x1, y1, z1).color(r, g, b, a).endVertex();
+        wr.pos(x1, y0, z1).color(r, g, b, a).endVertex();
+
+        tess.draw();
+        GlStateManager.enableCull();
+    }
+}

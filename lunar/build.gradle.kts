@@ -1,0 +1,43 @@
+plugins {
+    id("net.weavemc.gradle") version "1.3.3"
+}
+
+group = "com.bedwarsqol"
+version = "0.2.0"
+
+weave {
+    configure {
+        name = "BedwarsQOL"
+        modId = "bedwarsqol"
+        entryPoints = listOf("com.bedwarsqol.BedwarsQol")
+        mixinConfigs = listOf("mixins.bedwarsqol.json")
+        mcpMappings()
+    }
+    version("1.8.9")
+}
+
+repositories {
+    maven("https://repo.spongepowered.org/maven/")
+    // Weave packages: https://gitlab.com/weave-mc/weave/-/packages/
+    maven("https://gitlab.com/api/v4/projects/80566527/packages/maven")
+}
+
+dependencies {
+    implementation("net.weavemc:loader:1.3.3")
+    implementation("net.weavemc:internals:1.3.3")
+    implementation("net.weavemc.api:api:1.3.3")
+    implementation("net.weavemc.api:api-v1_8:1.3.3") // 1.8 events
+    compileOnly("org.spongepowered:mixin:0.8.5")
+
+    // Provided by Lunar/Minecraft at runtime — compileOnly so they aren't bundled into the mod jar.
+    // Versions match what 1.8.9 ships.
+    compileOnly("org.lwjgl.lwjgl:lwjgl:2.9.4-nightly-20150209")
+    compileOnly("com.google.code.gson:gson:2.2.4")
+    compileOnly("com.mojang:authlib:1.5.21")
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(8))
+    }
+}
