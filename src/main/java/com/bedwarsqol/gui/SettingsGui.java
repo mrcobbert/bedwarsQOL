@@ -43,6 +43,11 @@ public class SettingsGui extends GuiScreen {
     private static final int K_TAB_HEADERFOOTER = 44;
     private static final int K_TAB_PING = 52;
     private static final int K_CHATHOVER = 53;
+    // Per-module "Background" sub-toggles (draw a panel behind the HUD element).
+    private static final int K_POTION_BG = 60, K_ARMOR_BG = 61, K_INFO_BG = 62,
+            K_INVENTORY_BG = 63, K_GENTIMERS_BG = 64, K_KEYSTROKES_BG = 65;
+    // HUD text font: modern (Inter) vs vanilla Minecraft.
+    private static final int K_HUDFONT = 66;
     private static final int K_SCOREBOARD_SIZE = 46, K_STYLEDTAB_SIZE = 47;
     private static final int K_SUPPRESSESC = 48;
     private static final int K_DUMMY = 49, K_DUMMY_KEY = 50, K_DUMMY_CLEAR = 51;
@@ -54,6 +59,7 @@ public class SettingsGui extends GuiScreen {
     private static final String[] GUI_SIZES = {"Small", "Medium", "Large"};
     private static final String[] TEXT_SIZES = {"Small", "Medium", "Large"};
     private static final String[] DISPLAY_MODES = {"Text", "Image"};
+    private static final String[] FONT_MODES = {"Modern", "Minecraft"};
     private static final String[] OVERLAY_STYLES = {"Outline", "Fill", "Both"};
     private static final String[] OVERLAY_COLORS = {"White", "Red", "Green", "Blue", "Yellow", "Aqua", "Pink"};
     private static final int[] OVERLAY_COLOR_RGB = {0xFFFFFF, 0xFF5555, 0x55FF55, 0x5599FF, 0xFFD24A, 0x55FFFF, 0xFF7AC6};
@@ -129,35 +135,41 @@ public class SettingsGui extends GuiScreen {
             // Search has its own path (drawSearch): a search bar over a filtered list of every module.
             new Section("Search"),
             new Section("HUD", true,
-                    new RowDef(RowType.TOGGLE, "Potion", "Active potion effects and timers", K_POTION),
+                    new RowDef(RowType.TOGGLE, "Potion", "Active effects and timers", K_POTION),
                     new RowDef(RowType.TOGGLE, "In Game Only", K_POTION_INGAME, null, K_POTION),
-                    new RowDef(RowType.TOGGLE, "Armor", "Your equipped armor type", K_ARMOR),
+                    new RowDef(RowType.TOGGLE, "Background", K_POTION_BG, null, K_POTION),
+                    new RowDef(RowType.TOGGLE, "Armor", "Equipped armor type", K_ARMOR),
                     new RowDef(RowType.TOGGLE, "In Game Only", K_ARMOR_INGAME, null, K_ARMOR),
-                    new RowDef(RowType.TOGGLE, "Info", "FPS, CPS, TPS, and ping", K_INFO),
-                    new RowDef(RowType.TOGGLE, "Inventory", "Your stored items at a glance", K_INVENTORY),
+                    new RowDef(RowType.TOGGLE, "Background", K_ARMOR_BG, null, K_ARMOR),
+                    new RowDef(RowType.TOGGLE, "Info", "FPS, CPS, TPS, ping", K_INFO),
+                    new RowDef(RowType.TOGGLE, "Background", K_INFO_BG, null, K_INFO),
+                    new RowDef(RowType.TOGGLE, "Inventory", "Stored items at a glance", K_INVENTORY),
                     new RowDef(RowType.TOGGLE, "In Game Only", K_INVENTORY_INGAME, null, K_INVENTORY),
-                    new RowDef(RowType.TOGGLE, "Gen Timers", "Diamond and emerald spawn countdowns", K_GENTIMERS),
-                    new RowDef(RowType.TOGGLE, "Keystrokes", "WASD and spacebar display", K_KEYSTROKES),
-                    new RowDef(RowType.TOGGLE, "In Game Only", K_KEYSTROKES_INGAME, null, K_KEYSTROKES)),
+                    new RowDef(RowType.TOGGLE, "Background", K_INVENTORY_BG, null, K_INVENTORY),
+                    new RowDef(RowType.TOGGLE, "Gen Timers", "Diamond and emerald timers", K_GENTIMERS),
+                    new RowDef(RowType.TOGGLE, "Background", K_GENTIMERS_BG, null, K_GENTIMERS),
+                    new RowDef(RowType.TOGGLE, "Keystrokes", "WASD and spacebar keys", K_KEYSTROKES),
+                    new RowDef(RowType.TOGGLE, "In Game Only", K_KEYSTROKES_INGAME, null, K_KEYSTROKES),
+                    new RowDef(RowType.TOGGLE, "Background", K_KEYSTROKES_BG, null, K_KEYSTROKES)),
             new Section("Combat", true,
-                    new RowDef(RowType.TOGGLE, "Hand Position", "Move and resize your held item", K_HANDPOS),
+                    new RowDef(RowType.TOGGLE, "Hand Position", "Move and resize held item", K_HANDPOS),
                     new RowDef(RowType.SLIDER, "X", K_HANDX, -1.0f, 1.0f, K_HANDPOS),
                     new RowDef(RowType.SLIDER, "Y", K_HANDY, -1.0f, 1.0f, K_HANDPOS),
                     new RowDef(RowType.SLIDER, "Z", K_HANDZ, -1.0f, 1.0f, K_HANDPOS),
                     new RowDef(RowType.SLIDER, "Scale", K_HANDSCALE, 0.5f, 2.0f, K_HANDPOS),
                     new RowDef(RowType.TOGGLE, "TNT Countdown", "Fuse timer for nearby TNT", K_TNTFUSE),
                     new RowDef(RowType.STEPPER, "Radius", K_TNTRADIUS, TNT_RADII, K_TNTFUSE),
-                    new RowDef(RowType.TOGGLE, "Disable Esc Menu", "Stop Esc opening the pause menu mid-combat (rebind in Controls)", K_SUPPRESSESC)),
+                    new RowDef(RowType.TOGGLE, "Disable Esc Menu", "Stop Esc pausing the game", K_SUPPRESSESC)),
             new Section("Visuals", true,
-                    new RowDef(RowType.TOGGLE, "Block Overlay", "Highlight the block you look at", K_BLOCKOVERLAY),
+                    new RowDef(RowType.TOGGLE, "Block Overlay", "Highlight targeted block", K_BLOCKOVERLAY),
                     new RowDef(RowType.TOGGLE, "See-Through", K_SEETHROUGH, null, K_BLOCKOVERLAY),
                     new RowDef(RowType.STEPPER, "Style", K_OVERLAYSTYLE, OVERLAY_STYLES, K_BLOCKOVERLAY),
                     new RowDef(RowType.STEPPER, "Color", K_OVERLAYCOLOR, OVERLAY_COLORS, K_BLOCKOVERLAY),
                     new RowDef(RowType.STEPPER, "Opacity", K_OVERLAYOPACITY, OVERLAY_OPACITIES, K_BLOCKOVERLAY),
-                    new RowDef(RowType.TOGGLE, "Hide Tab Header/Footer", "Hide the server's tab header and footer text", K_TAB_HEADERFOOTER),
-                    new RowDef(RowType.TOGGLE, "Tab Numeric Ping", "Show latency as a number instead of signal bars", K_TAB_PING)),
+                    new RowDef(RowType.TOGGLE, "Hide Tab Header/Footer", "Hide tab header and footer", K_TAB_HEADERFOOTER),
+                    new RowDef(RowType.TOGGLE, "Tab Numeric Ping", "Show ping as a number", K_TAB_PING)),
             new Section("Hypixel Stats", true,
-                    new RowDef(RowType.TOGGLE, "Hypixel Stats", "Players' BedWars stats on screen", K_STATS),
+                    new RowDef(RowType.TOGGLE, "Hypixel Stats", "BedWars stats on screen", K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Nametag", K_NAMETAG, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Tab", K_TAB, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Chat Hover", K_CHATHOVER, null, K_STATS),
@@ -173,9 +185,10 @@ public class SettingsGui extends GuiScreen {
                     new RowDef(RowType.STEPPER, "Scoreboard Size", K_SCOREBOARD_SIZE, SIZES),
                     new RowDef(RowType.STEPPER, "Tab List Size", K_STYLEDTAB_SIZE, SIZES),
                     new RowDef(RowType.STEPPER, "Display", K_DISPLAY, DISPLAY_MODES),
+                    new RowDef(RowType.STEPPER, "Font", K_HUDFONT, FONT_MODES),
                     new RowDef(RowType.ACTION, "Edit HUD", K_EDITHUD, null)),
             new Section("Debug", true,
-                    new RowDef(RowType.TOGGLE, "Test Dummy", "Spawn clientside practice players", K_DUMMY),
+                    new RowDef(RowType.TOGGLE, "Test Dummy", "Spawn practice players", K_DUMMY),
                     new RowDef(RowType.KEYBIND, "Spawn Key", K_DUMMY_KEY, null, K_DUMMY),
                     new RowDef(RowType.ACTION, "Remove Dummies", K_DUMMY_CLEAR, DUMMY_CLEAR_LABEL, K_DUMMY)),
     };
@@ -210,7 +223,8 @@ public class SettingsGui extends GuiScreen {
     private static final int KNOB_RING = 0x4D000000;
     private static final int TRACK_DISABLED = 0xFF262626; // sub-setting switch when its parent is off
     private static final int KNOB_DISABLED = 0xFF555555;
-    private static final int SWITCH_DISABLED_BORDER = 0x66FFFFFF; // whiteish keyline on a disabled switch
+    private static final int SWITCH_DISABLED_BORDER = 0x66FFFFFF; // whiteish keyline on a disabled control
+    private static final int CHECKBOX_BORDER = 0x70FFFFFF;        // keyline around an unchecked checkbox
     private static final int TEXT_HI = Theme.TEXT_HI;
     private static final int TEXT_MID = Theme.TEXT_MID;
     private static final int TEXT_LO = Theme.TEXT_LO;
@@ -221,6 +235,16 @@ public class SettingsGui extends GuiScreen {
     private static final int CARD_OFF_BORDER = 0x14FFFFFF;
     private static final int CARD_ON_BORDER = 0x3DFFFFFF;
     private static final int CARD_R = 5;
+    // ---- dropdown (<select>) menu ----
+    private static final int DD_BG = 0xFF1E1E1E;            // menu surface (fully opaque, slightly elevated)
+    // White keyline matching the main GUI panel border. Drawn LAST in drawDropdownPopup, on top of the
+    // row fills, so it frames the box and every row edge consistently; the fills are inset to its inner
+    // edge (see drawDropdownPopup) so none spills past it. Linked to the panel border so they always match.
+    private static final int DD_BORDER = PANEL_BORDER;      // == Theme.PANEL_BORDER (0xCCFFFFFF white keyline)
+    // Opaque row fills, framed by the white keyline above: a subtle grey selection and a brighter hover
+    // (== 0x33 / 0x4D white resolved over DD_BG). (Recompute these if DD_BG changes.)
+    private static final int DD_ITEM_SELECTED = 0xFF4B4B4B; // subtle grey selection
+    private static final int DD_ITEM_HOVER = 0xFF626262;    // brighter active-row (hovered) tone
     // Always-reserved gutter on the right of the content column so card width is identical whether
     // or not the scrollbar is showing (the 3px scrollbar lives inside this band).
     private static final int SCROLL_GUTTER = 7;
@@ -274,6 +298,11 @@ public class SettingsGui extends GuiScreen {
     private int contentX, contentRight, contentTop, contentH, rowH;
     private int navStartY, navItemH;
     private float labelScale, valueScale, navScale;
+    // Module-card typography: a slightly smaller header and a noticeably smaller subtext than the base
+    // label scale, so cards read compact/sleek and the (shortened) descriptions fit on a single line.
+    private float cardTitleScale, cardDescScale;
+    // Dropdown typography: a notch smaller than the value scale so triggers and option rows read compact.
+    private float ddFontScale;
     // Widest stepper option label on the current page — shared so every stepper's arrows align.
     private float pageStepperTextW;
     // Nav icon geometry (computed in initGui), drawn left of each sidebar label.
@@ -327,6 +356,17 @@ public class SettingsGui extends GuiScreen {
     private int rowsViewBottom;
     private float kbChipScale;
 
+    // ---- Dropdown (<select>) popup state ----
+    // A stepper's options are chosen from a click-to-open dropdown instead of < > arrows. Only one is
+    // open at a time, keyed by stepper kind (0 = none). The trigger's screen rect is captured at open
+    // time so the popup stays anchored even though rows live inside a scrolled/translated matrix; the
+    // popup is drawn last (on top of everything) and is modal — it absorbs the next click (pick or dismiss).
+    private int openDropdownKind;
+    private String[] ddOptions;
+    private float ddX1, ddY1, ddX2, ddY2; // anchor = the trigger button's screen rect
+    private float ddScale;                // option text scale (matches the trigger)
+    private float ddPad;                  // horizontal padding (matches the trigger)
+
     // ---- Search section state ----
     private final StringBuilder searchQuery = new StringBuilder();
     private final List<SearchModule> allModules = new ArrayList<SearchModule>();    // collected once in initGui
@@ -338,6 +378,7 @@ public class SettingsGui extends GuiScreen {
     @Override
     public void initGui() {
         buttonList.clear();
+        closeDropdown(); // never carry an open popup across a resize / panel re-layout
         // Key repeat so backspace/arrows repeat while editing a macro message; reset on close.
         Keyboard.enableRepeatEvents(true);
         float gf = guiFactor(settings().guiSize);
@@ -356,10 +397,13 @@ public class SettingsGui extends GuiScreen {
         contentTop = panelY + pad;
         contentH = panelH - 2 * pad;
         rowH = clamp(contentH / MAX_ROWS, 16, 40);
-        childRowH = clamp(Math.round(rowH * 0.84f), 14, 34);
+        childRowH = clamp(Math.round(rowH * 0.66f), 12, 26); // compact sub-setting rows
         childIndent = clamp(Math.round(rowH * 0.7f), 12, 28);
         labelScale = clampf(rowH * 0.046f, 1.0f, 1.85f);
         valueScale = labelScale * 0.96f;
+        ddFontScale = valueScale * 0.74f; // dropdowns smaller than other value text
+        cardTitleScale = labelScale * 0.9f;
+        cardDescScale = labelScale * 0.66f;
         // Sidebar vertical layout first: every SECTIONS item must fit inside the panel at every GUI size.
         int navTop = panelY + pad;
         int navBottom = panelY + panelH - pad;
@@ -418,6 +462,8 @@ public class SettingsGui extends GuiScreen {
             return;
         }
         Section section = SECTIONS[selectedSection];
+        // Compact the flat "Settings" rows: a shorter top-level row height than the global rowH.
+        int flatRowH = clamp(Math.round(rowH * 0.80f), 13, 30);
         // Pull any ACTION row out to the shared pinned bottom band; lay out the rest (steppers).
         // Widest stepper option label is shared so every stepper's arrows align.
         pageStepperTextW = 0f;
@@ -425,12 +471,12 @@ public class SettingsGui extends GuiScreen {
         for (RowDef rd : section.rows) {
             if (rd.type == RowType.ACTION) { pinnedAction = rd; continue; }
             if (rd.type == RowType.STEPPER && rd.options != null) {
-                float sc = rd.child ? valueScale * 0.9f : valueScale;
+                // Triggers render their value at ddFontScale, so measure the option widths there too.
                 for (String opt : rd.options) {
-                    pageStepperTextW = Math.max(pageStepperTextW, GuiRender.textWidth(opt, sc));
+                    pageStepperTextW = Math.max(pageStepperTextW, GuiRender.textWidth(opt, ddFontScale));
                 }
             }
-            blockH += rd.child ? childRowH : rowH;
+            blockH += rd.child ? childRowH : flatRowH;
         }
         rowsBlockH = blockH;
         // Rows fill the area above the pinned button (if any) and always start from the TOP, not centered.
@@ -450,7 +496,7 @@ public class SettingsGui extends GuiScreen {
             row.x = contentX + indent;
             row.y = y;
             row.w = contentW - indent;
-            row.h = rd.child ? childRowH : rowH;
+            row.h = rd.child ? childRowH : flatRowH;
             rows.add(row);
             y += row.h;
         }
@@ -506,7 +552,7 @@ public class SettingsGui extends GuiScreen {
             for (RowDef rd : kids) {
                 if (rd.type == RowType.STEPPER && rd.options != null) {
                     for (String opt : rd.options) {
-                        pageStepperTextW = Math.max(pageStepperTextW, GuiRender.textWidth(opt, valueScale * 0.9f));
+                        pageStepperTextW = Math.max(pageStepperTextW, GuiRender.textWidth(opt, ddFontScale));
                     }
                 }
             }
@@ -514,8 +560,7 @@ public class SettingsGui extends GuiScreen {
         int cardGap = clamp(Math.round(rowH * 0.20f), 3, 8);
         int innerPad = clamp(Math.round(rowH * 0.16f), 3, 7);
         int cIndent = clamp(Math.round(rowH * 0.5f), 10, 22);
-        float descScale = labelScale * 0.74f;
-        int cardHeaderH = Math.round(BedwarsQolFont.height(labelScale) + 1f + BedwarsQolFont.height(descScale))
+        int cardHeaderH = Math.round(BedwarsQolFont.height(cardTitleScale) + 1f + BedwarsQolFont.height(cardDescScale))
                 + clamp(Math.round(rowH * 0.4f), 7, 14);
 
         // Total height first (for the scrollbar / scroll clamp).
@@ -620,11 +665,18 @@ public class SettingsGui extends GuiScreen {
         // sidebar / content divider
         GuiRender.rect(panelX + sidebarW, panelY + pad, panelX + sidebarW + 1, py2 - pad, DIVIDER);
 
-        drawSidebar(mouseX, mouseY);
-        if (selectedSection == SEARCH_SECTION) drawSearch(mouseX, mouseY);
-        else if (selectedSection == KEYBINDS_SECTION) drawKeybinds(mouseX, mouseY);
-        else if (SECTIONS[selectedSection].cards) drawCards(mouseX, mouseY);
-        else drawRows(mouseX, mouseY);
+        // While a dropdown is open it's modal: feed the rest of the GUI an off-screen cursor so nothing
+        // behind the menu hover-highlights (other triggers, rows) or scales (sidebar items).
+        int hx = openDropdownKind != 0 ? -1 : mouseX;
+        int hy = openDropdownKind != 0 ? -1 : mouseY;
+        drawSidebar(hx, hy);
+        if (selectedSection == SEARCH_SECTION) drawSearch(hx, hy);
+        else if (selectedSection == KEYBINDS_SECTION) drawKeybinds(hx, hy);
+        else if (SECTIONS[selectedSection].cards) drawCards(hx, hy);
+        else drawRows(hx, hy);
+
+        // The open dropdown menu floats above all section content (and the scrollbar).
+        drawDropdownPopup(mouseX, mouseY);
     }
 
     private void drawSidebar(int mouseX, int mouseY) {
@@ -660,10 +712,9 @@ public class SettingsGui extends GuiScreen {
         if (clip) GuiRender.beginScissor(contentX, viewTop, contentRight, viewBottom);
         GlStateManager.pushMatrix();
         GlStateManager.translate(0f, scrollDy, 0f);
-        float descScale = labelScale * 0.74f;
         int padX = clamp(Math.round(rowH * 0.30f), 7, 13);
-        float titleH = BedwarsQolFont.height(labelScale);
-        float descH = BedwarsQolFont.height(descScale);
+        float titleH = BedwarsQolFont.height(cardTitleScale);
+        float descH = BedwarsQolFont.height(cardDescScale);
         float chevW = clampf(rowH * 0.34f, 6f, 11f);
         for (Card card : cards) {
             if (clip && (card.y + card.h + scrollDy < viewTop || card.y + scrollDy > viewBottom)) continue;
@@ -677,11 +728,11 @@ public class SettingsGui extends GuiScreen {
             float textMaxW = card.w - 2 * padX - chevSpace;
             float blockH = titleH + 1f + descH;
             float top = card.y + (card.headerH - blockH) / 2f;
-            GuiRender.text(ellipsize(card.module.label, labelScale, textMaxW), card.x + padX, top,
-                    labelScale, on ? TEXT_HI : TEXT_MID, MED);
+            GuiRender.text(ellipsize(card.module.label, cardTitleScale, textMaxW), card.x + padX, top,
+                    cardTitleScale, on ? TEXT_HI : TEXT_MID, MED);
             if (card.module.desc != null) {
-                GuiRender.text(ellipsize(card.module.desc, descScale, textMaxW), card.x + padX, top + titleH + 1f,
-                        descScale, TEXT_LO);
+                GuiRender.text(ellipsize(card.module.desc, cardDescScale, textMaxW), card.x + padX, top + titleH + 1f,
+                        cardDescScale, TEXT_LO);
             }
             // expand indicator for modules with sub-options ("+" collapsed / "-" expanded)
             if (card.hasSub) {
@@ -710,8 +761,8 @@ public class SettingsGui extends GuiScreen {
 
     /** Renders one sub-option control (toggle / stepper / slider) inside an expanded card. */
     private void drawControl(Row row, int mouseX, int mouseY, ClientSettings cfg) {
-        float lScale = labelScale * 0.9f;
-        float vScale = valueScale * 0.9f;
+        float lScale = labelScale * 0.72f;
+        float vScale = valueScale * 0.72f;
         float labelY = vcenter(row.y, row.h, lScale);
         if (row.hit(mouseX, mouseY)) {
             GuiRender.roundedRect(row.x, row.y + 1, row.x + row.w, row.y + row.h - 1, 4, ROW_HOVER);
@@ -719,7 +770,7 @@ public class SettingsGui extends GuiScreen {
         switch (row.def.type) {
             case TOGGLE:
                 GuiRender.text(row.def.label, row.x + 2, labelY, lScale, TEXT_HI, MED);
-                drawSwitch(row, toggleValue(cfg, row.def.kind), true);
+                drawCheckbox(row, toggleValue(cfg, row.def.kind), true);
                 break;
             case KEYBIND: {
                 GuiRender.text(row.def.label, row.x + 2, labelY, lScale, TEXT_HI, MED);
@@ -737,17 +788,7 @@ public class SettingsGui extends GuiScreen {
             }
             case STEPPER: {
                 GuiRender.text(row.def.label, row.x + 2, labelY, lScale, TEXT_HI, MED);
-                float[] z = stepperZones(row);
-                boolean lh = GuiRender.inside(mouseX, mouseY, z[0], row.y, z[1], row.y + row.h);
-                boolean rh = GuiRender.inside(mouseX, mouseY, z[4], row.y, z[5], row.y + row.h);
-                float cy = row.y + row.h / 2f;
-                float chH = clampf(row.h * 0.08f, 1.75f, 3f);
-                float chW = chH * 0.85f;
-                float thick = clampf(row.h * 0.028f, 0.6f, 0.85f);
-                GuiRender.chevron((z[0] + z[1]) / 2f, cy, chW, chH, true, thick, lh ? TEXT_HI : TEXT_MID);
-                GuiRender.textCentered(row.def.options[stepperIndex(cfg, row.def.kind)],
-                        (z[2] + z[3]) / 2f, vcenter(row.y, row.h, vScale), vScale, TEXT_HI);
-                GuiRender.chevron((z[4] + z[5]) / 2f, cy, chW, chH, false, thick, rh ? TEXT_HI : TEXT_MID);
+                drawDropdownTrigger(row, row.def.options[stepperIndex(cfg, row.def.kind)], ddFontScale, true, mouseX, mouseY);
                 break;
             }
             case SLIDER: {
@@ -803,8 +844,10 @@ public class SettingsGui extends GuiScreen {
             boolean child = row.def.child;
             // A sub-setting is greyed + non-interactive while its parent toggle is off.
             boolean enabled = !child || toggleValue(cfg, row.def.parentKind);
-            float lScale = child ? labelScale * 0.9f : labelScale;
-            float vScale = child ? valueScale * 0.9f : valueScale;
+            // Match the module-card typography: card titles render at labelScale*0.9, so the (flat)
+            // Settings rows use that same compact size for a consistent feel across the whole GUI.
+            float lScale = labelScale * 0.72f;
+            float vScale = valueScale * 0.72f;
             int labelColor = enabled ? TEXT_HI : TEXT_LO;
             boolean inView = !clip || (mouseY >= viewTop && mouseY <= viewBottom);
             boolean hover = inView && enabled && row.hit(mouseX, mouseY);
@@ -821,22 +864,11 @@ public class SettingsGui extends GuiScreen {
             switch (row.def.type) {
                 case TOGGLE:
                     GuiRender.text(row.def.label, row.x + 2, labelY, lScale, labelColor, MED);
-                    drawSwitch(row, toggleValue(cfg, row.def.kind), enabled);
+                    drawCheckbox(row, toggleValue(cfg, row.def.kind), enabled);
                     break;
                 case STEPPER: {
                     GuiRender.text(row.def.label, row.x + 2, labelY, lScale, labelColor, MED);
-                    float[] z = stepperZones(row);
-                    boolean lh = enabled && GuiRender.inside(mouseX, mouseY, z[0], row.y, z[1], row.y + row.h);
-                    boolean rh = enabled && GuiRender.inside(mouseX, mouseY, z[4], row.y, z[5], row.y + row.h);
-                    float cy = row.y + row.h / 2f;
-                    float chH = clampf(row.h * 0.08f, 1.75f, 3f);
-                    float chW = chH * 0.85f;
-                    float thick = clampf(row.h * 0.028f, 0.6f, 0.85f);
-                    int chevIdle = enabled ? TEXT_MID : TEXT_LO;
-                    GuiRender.chevron((z[0] + z[1]) / 2f, cy, chW, chH, true, thick, lh ? TEXT_HI : chevIdle);
-                    GuiRender.textCentered(row.def.options[stepperIndex(cfg, row.def.kind)],
-                            (z[2] + z[3]) / 2f, vcenter(row.y, row.h, vScale), vScale, enabled ? TEXT_HI : TEXT_LO);
-                    GuiRender.chevron((z[4] + z[5]) / 2f, cy, chW, chH, false, thick, rh ? TEXT_HI : chevIdle);
+                    drawDropdownTrigger(row, row.def.options[stepperIndex(cfg, row.def.kind)], ddFontScale, enabled, mouseX, mouseY);
                     break;
                 }
                 case SLIDER: {
@@ -873,25 +905,25 @@ public class SettingsGui extends GuiScreen {
         }
     }
 
-    private void drawSwitch(Row row, boolean on, boolean enabled) {
-        float f = row.def.child ? 0.26f : 0.32f;  // sub-setting switches are a touch smaller
-        float trackH = clampf(row.h * f, row.def.child ? 8f : 10f, row.def.child ? 11f : 14f);
-        float trackW = trackH * 1.85f;
-        float x2 = row.x + row.w;
-        float x1 = x2 - trackW;
-        float y1 = row.y + (row.h - trackH) / 2f;
-        float y2 = y1 + trackH;
-        int track = !enabled ? TRACK_DISABLED : (on ? TRACK_ON : TRACK_OFF);
-        GuiRender.roundedRect(x1, y1, x2, y2, trackH / 2f, track);
-        if (!enabled) { // ghost a whiteish keyline around a disabled switch so it still reads as a control
-            GuiRender.roundedRectOutline(x1, y1, x2, y2, trackH / 2f, 0.75f, SWITCH_DISABLED_BORDER);
+    /** Right-aligned checkbox: an empty rounded square (keyline) when off, filled solid white when on.
+     *  Simple, elegant, modern — replaces the old pill switch. */
+    private void drawCheckbox(Row row, boolean on, boolean enabled) {
+        // Small box; vertically centered on the row (== the label's vertical center, since the label is
+        // font-centered in the same row height).
+        float size = clampf(row.h * (row.def.child ? 0.22f : 0.26f),
+                row.def.child ? 5f : 6f, row.def.child ? 7f : 8.5f);
+        float rightPad = controlRightPad(row.h); // inset from the row's right edge (shared with the dropdown)
+        float x2 = row.x + row.w - rightPad;
+        float x1 = x2 - size;
+        float y1 = row.y + (row.h - size) / 2f;
+        float y2 = y1 + size;
+        float r = clampf(size * 0.22f, 1.2f, 2f);
+        if (on) {
+            GuiRender.roundedRect(x1, y1, x2, y2, r, enabled ? KNOB_ON : KNOB_DISABLED);
+        } else {
+            GuiRender.roundedRect(x1, y1, x2, y2, r, enabled ? TRACK_OFF : TRACK_DISABLED);
+            GuiRender.roundedRectOutline(x1, y1, x2, y2, r, 0.85f, enabled ? CHECKBOX_BORDER : SWITCH_DISABLED_BORDER);
         }
-
-        float knobR = trackH / 2f - 2.5f;
-        float cy = (y1 + y2) / 2f;
-        float cx = on ? (x2 - 2f - knobR) : (x1 + 2f + knobR);
-        GuiRender.circle(cx, cy, knobR + 0.8f, KNOB_RING); // thin ring defines the knob on either track
-        GuiRender.circle(cx, cy, knobR, !enabled ? KNOB_DISABLED : (on ? KNOB_ON : KNOB_OFF));
     }
 
     /** Right-aligned pill button for a KEYBIND / ACTION card child, sized to its text. */
@@ -931,16 +963,139 @@ public class SettingsGui extends GuiScreen {
         GuiRender.textCentered(label, (b[0] + b[2]) / 2f, vcenter(b[1], b[3] - b[1], bs), bs, TEXT_HI, MED);
     }
 
-    private float[] stepperZones(Row row) {
-        // Unified per page: every stepper uses the widest option label on the page (+ a little
-        // padding) as its value-column width, so the chevrons line up across rows.
-        float chevBox = clampf(row.h * 0.5f, 13f, 18f);
-        float pad = clampf(row.h * 0.16f, 4f, 7f);
-        float valueW = pageStepperTextW + 2f * pad;
-        float rX2 = row.x + row.w, rX1 = rX2 - chevBox;
-        float vX2 = rX1, vX1 = vX2 - valueW;
-        float lX2 = vX1, lX1 = lX2 - chevBox;
-        return new float[]{lX1, lX2, vX1, vX2, rX1, rX2};
+    /** The dropdown trigger button rect [x1,y1,x2,y2] for a stepper row. Right-aligned to the row and
+     *  given a uniform width per page (widest option + padding + caret) so every dropdown lines up. */
+    private float[] dropdownRect(Row row) {
+        float h = clampf(row.h * 0.50f, 10f, 15f);
+        float padX = ddPadX(row.h);
+        float caretW = clampf(h * 0.24f, 2f, 3.2f);
+        // Compact: edge pad + value column (sized to the widest option) + small gap + caret + edge pad.
+        float w = pageStepperTextW + 2f * padX + padX * 0.6f + caretW;
+        float x2 = row.x + row.w - controlRightPad(row.h); // right edge lines up with the checkbox column
+        float x1 = x2 - w;
+        float y1 = row.y + (row.h - h) / 2f;
+        return new float[]{x1, y1, x2, y1 + h};
+    }
+
+    private float ddPadX(float rowHeight) {
+        return clampf(rowHeight * 0.16f, 4f, 7f);
+    }
+
+    /** Inset from the row's right edge shared by the checkbox and the dropdown trigger, so their right
+     *  edges line up down the column. */
+    private float controlRightPad(float rowHeight) {
+        return clampf(rowHeight * 0.32f, 7f, 13f);
+    }
+
+    /** Draws a stepper's dropdown trigger: a chip showing the current value with a caret affordance
+     *  (down when closed, up when open). Brightens on hover; shows a bright keyline while open. */
+    private void drawDropdownTrigger(Row row, String value, float scale, boolean enabled, int mouseX, int mouseY) {
+        float[] c = dropdownRect(row);
+        boolean open = openDropdownKind == row.def.kind;
+        boolean hover = enabled && GuiRender.inside(mouseX, mouseY, c[0], c[1], c[2], c[3]);
+        float r = (c[3] - c[1]) * 0.28f;
+        GuiRender.roundedRect(c[0], c[1], c[2], c[3], r, (hover || open) ? BTN_HOVER : BTN_BG);
+        GuiRender.roundedRectOutline(c[0], c[1], c[2], c[3], r, 0.75f, open ? PANEL_BORDER : BTN_BORDER);
+        float padX = ddPadX(row.h);
+        float caretW = clampf((c[3] - c[1]) * 0.24f, 2f, 3.2f);
+        float caretLeft = c[2] - padX - caretW;
+        // Value text centered between the button's left edge and the down caret.
+        GuiRender.textCentered(value, (c[0] + caretLeft) / 2f, vcenter(c[1], c[3] - c[1], scale), scale,
+                enabled ? TEXT_HI : TEXT_LO, MED);
+        drawCaret(caretLeft + caretW / 2f, (c[1] + c[3]) / 2f, caretW / 2f, caretW * 0.34f, open, enabled ? TEXT_MID : TEXT_LO);
+    }
+
+    /** A small "v" (down) / "^" (up) caret, drawn as two AA hairlines. */
+    private void drawCaret(float cx, float cy, float hw, float hh, boolean up, int color) {
+        if (up) {
+            GuiRender.line(cx - hw, cy + hh, cx, cy - hh, 0.85f, color);
+            GuiRender.line(cx, cy - hh, cx + hw, cy + hh, 0.85f, color);
+        } else {
+            GuiRender.line(cx - hw, cy - hh, cx, cy + hh, 0.85f, color);
+            GuiRender.line(cx, cy + hh, cx + hw, cy - hh, 0.85f, color);
+        }
+    }
+
+    /** Option-list rect [x1,y1,x2,y2,itemH] for the open dropdown: dropped below the anchor, flipped
+     *  above (or clamped within the panel) when it would overflow the bottom edge. */
+    private float[] dropdownListGeom() {
+        int n = ddOptions.length;
+        float itemH = clampf(ddY2 - ddY1, 10f, 16f);
+        float padY = 2f;
+        float maxOpt = 0f;
+        for (String o : ddOptions) maxOpt = Math.max(maxOpt, GuiRender.textWidth(o, ddScale, MED));
+        // As compact as the content allows: left pad + widest option + right pad.
+        float w = maxOpt + ddPad * 2f;
+        float x2 = ddX2;             // right-aligned to the trigger
+        float x1 = x2 - w;
+        float totalH = n * itemH + padY * 2f;
+        float y1 = ddY2 + 2f;        // below the trigger by default
+        float limitTop = panelY + pad;
+        float limitBottom = panelY + panelH - pad;
+        if (y1 + totalH > limitBottom) {
+            float above = ddY1 - 2f - totalH;
+            y1 = above >= limitTop ? above : Math.max(limitTop, limitBottom - totalH);
+        }
+        return new float[]{x1, y1, x2, y1 + totalH, itemH};
+    }
+
+    /** Draws the open dropdown's option list on top of everything (called last in drawScreen). */
+    private void drawDropdownPopup(int mouseX, int mouseY) {
+        if (openDropdownKind == 0 || ddOptions == null) return;
+        float[] g = dropdownListGeom();
+        float x1 = g[0], y1 = g[1], x2 = g[2], y2 = g[3], itemH = g[4];
+        float padY = 2f, r = 4f;
+        GuiRender.roundedRect(x1, y1, x2, y2, r, DD_BG);
+        int sel = stepperIndex(settings(), openDropdownKind);
+        // Fill each highlighted row up to the keyline's inner SOLID edge (geom - 0.5 = stroke 0.75
+        // minus its 0.25 AA half), with a concentric radius, then draw the keyline OPAQUE and ON TOP
+        // (below). The keyline is then the single crisp edge for every row: it covers each fill's
+        // outer AA uniformly, so no row — rounded or square — sticks past it, and the fill→edge
+        // transition is hidden, so no sub-pixel seam shows at any GUI scale. Filling just to the solid
+        // edge (rather than the geometric edge) means the fill never spills its own AA past the
+        // keyline; the keyline on top then guarantees no gap below it.
+        float inset = 0.5f;
+        float rr = r - inset; // concentric with the menu's corner arcs (shared centers)
+        int last = ddOptions.length - 1;
+        int n = ddOptions.length;
+        for (int i = 0; i < n; i++) {
+            float iy1 = y1 + padY + i * itemH;
+            float iy2 = iy1 + itemH;
+            boolean hover = GuiRender.inside(mouseX, mouseY, x1, iy1, x2, iy2);
+            boolean selected = i == sel;
+            if (hover || selected) {
+                // Inset only the sides that touch the keyline; interior row boundaries stay put.
+                float hTop = i == 0 ? y1 + inset : iy1;
+                float hBot = i == last ? y2 - inset : iy2;
+                float rTL = 0f, rTR = 0f, rBR = 0f, rBL = 0f;
+                if (n == 1) { rTL = rTR = rBR = rBL = rr; } // sole row: all four corners
+                else if (i == 0) { rTL = rTR = rr; }        // first: top two
+                else if (i == last) { rBL = rBR = rr; }     // last: bottom two
+                GuiRender.roundedRect(x1 + inset, hTop, x2 - inset, hBot, rTL, rTR, rBR, rBL,
+                        hover ? DD_ITEM_HOVER : DD_ITEM_SELECTED);
+            }
+            GuiRender.text(ddOptions[i], x1 + ddPad, vcenter(iy1, itemH, ddScale), ddScale,
+                    (selected || hover) ? TEXT_HI : TEXT_MID, MED);
+        }
+        // Keyline LAST, opaque, on top of the fills — the single source of truth for the menu edge.
+        GuiRender.roundedRectOutline(x1, y1, x2, y2, r, 0.75f, DD_BORDER);
+    }
+
+    /** Opens (or toggles closed) the dropdown for a stepper row, anchoring it to the trigger button. */
+    private void openDropdown(Row row, float scale) {
+        if (openDropdownKind == row.def.kind) { closeDropdown(); return; }
+        float[] c = dropdownRect(row);
+        openDropdownKind = row.def.kind;
+        ddOptions = row.def.options;
+        ddX1 = c[0]; ddY1 = c[1]; ddX2 = c[2]; ddY2 = c[3];
+        ddScale = scale;
+        ddPad = ddPadX(row.h);
+        playClick();
+    }
+
+    private void closeDropdown() {
+        openDropdownKind = 0;
+        ddOptions = null;
     }
 
     private static float vcenter(float top, float boxH, float scale) {
@@ -954,6 +1109,26 @@ public class SettingsGui extends GuiScreen {
         super.mouseClicked(mouseX, mouseY, mouseButton);
         commitSliderEdit();                       // any click finalizes an open numeric field (Task 2)
         ClientSettings cfg = settings();
+
+        // An open dropdown is modal: the next click either picks an option or dismisses the menu.
+        if (openDropdownKind != 0) {
+            if (mouseButton == 0) {
+                float[] g = dropdownListGeom();
+                if (GuiRender.inside(mouseX, mouseY, g[0], g[1], g[2], g[3])) {
+                    int idx = clamp((int) Math.floor((mouseY - (g[1] + 3f)) / g[4]), 0, ddOptions.length - 1);
+                    int kind = openDropdownKind;
+                    setStepperIndex(cfg, kind, idx);
+                    closeDropdown();
+                    playClick();
+                    cfg.save();
+                    if (kind == K_GUISIZE) initGui(); // resize the panel live
+                    return;
+                }
+            }
+            closeDropdown();                       // clicked the trigger again or outside -> dismiss
+            return;
+        }
+
         if (mouseButton == 1) {                    // right-click: expand/collapse a card (search or section)
             if (selectedSection == SEARCH_SECTION
                     || (selectedSection != KEYBINDS_SECTION && SECTIONS[selectedSection].cards)) {
@@ -1035,23 +1210,9 @@ public class SettingsGui extends GuiScreen {
                     playClick();
                     cfg.save();
                     break;
-                case STEPPER: {
-                    float[] z = stepperZones(row);
-                    boolean changed = false;
-                    if (GuiRender.inside(mouseX, mouseY, z[0], row.y, z[1], row.y + row.h)) {
-                        step(cfg, row.def.kind, -1, row.def.options.length);
-                        changed = true;
-                    } else if (GuiRender.inside(mouseX, mouseY, z[4], row.y, z[5], row.y + row.h)) {
-                        step(cfg, row.def.kind, +1, row.def.options.length);
-                        changed = true;
-                    }
-                    if (changed) {
-                        playClick();
-                        cfg.save();
-                        if (row.def.kind == K_GUISIZE) initGui(); // resize the panel live
-                    }
+                case STEPPER:
+                    openDropdown(row, ddFontScale); // click the row -> open the value dropdown
                     break;
-                }
                 case SLIDER: {
                     float[] tr = sliderTrack(row);
                     if (mouseX >= tr[0] - 4) { // grab on the track / value region, not the label
@@ -1143,19 +1304,9 @@ public class SettingsGui extends GuiScreen {
                 }
                 break;
             }
-            case STEPPER: {
-                float[] z = stepperZones(row);
-                if (GuiRender.inside(mouseX, mouseY, z[0], row.y, z[1], row.y + row.h)) {
-                    step(cfg, row.def.kind, -1, row.def.options.length);
-                    playClick();
-                    cfg.save();
-                } else if (GuiRender.inside(mouseX, mouseY, z[4], row.y, z[5], row.y + row.h)) {
-                    step(cfg, row.def.kind, +1, row.def.options.length);
-                    playClick();
-                    cfg.save();
-                }
+            case STEPPER:
+                openDropdown(row, ddFontScale); // click the row -> open the value dropdown
                 break;
-            }
             case SLIDER: {
                 float[] vr = sliderValueRect(row);
                 if (GuiRender.inside(mouseX, mouseY, vr[0] - 3, vr[1] - 2, vr[2] + 2, vr[3] + 2)) {
@@ -1217,6 +1368,7 @@ public class SettingsGui extends GuiScreen {
         if (maxScroll <= 0) return;
         int dwheel = Mouse.getEventDWheel();
         if (dwheel == 0) return;
+        if (openDropdownKind != 0) return; // an open dropdown is modal: swallow the wheel, don't scroll
         // Proportional, fine-grained wheel mapping. macOS LWJGL2 reports (int)(deltaY*120): only ~10-12
         // per slow notch (more when spun fast, or many small momentum deltas from a trackpad); Windows
         // ~120. Using the MAGNITUDE (not just the sign) makes a trackpad scroll finely and a wheel scroll
@@ -1265,6 +1417,10 @@ public class SettingsGui extends GuiScreen {
 
     @Override
     protected void keyTyped(char typedChar, int keyCode) throws IOException {
+        if (openDropdownKind != 0) {               // an open dropdown swallows keys; ESC closes it
+            if (keyCode == Keyboard.KEY_ESCAPE) { closeDropdown(); playClick(); }
+            return;
+        }
         if (editingSliderKind != 0) {
             sliderEditKey(typedChar, keyCode);
             return;
@@ -1332,6 +1488,12 @@ public class SettingsGui extends GuiScreen {
             case K_ARMOR_INGAME: return cfg.armorInGameOnly;
             case K_INVENTORY_INGAME: return cfg.inventoryInGameOnly;
             case K_KEYSTROKES_INGAME: return cfg.keystrokesInGameOnly;
+            case K_POTION_BG: return cfg.potionBackgroundEnabled;
+            case K_ARMOR_BG: return cfg.armorBackgroundEnabled;
+            case K_INFO_BG: return cfg.infoBackgroundEnabled;
+            case K_INVENTORY_BG: return cfg.inventoryBackgroundEnabled;
+            case K_GENTIMERS_BG: return cfg.genTimersBackgroundEnabled;
+            case K_KEYSTROKES_BG: return cfg.keystrokesBackgroundEnabled;
             case K_BLOCKOVERLAY: return cfg.blockOverlayEnabled;
             case K_SEETHROUGH: return cfg.blockOverlaySeeThrough;
             case K_HANDPOS: return cfg.handPositionEnabled;
@@ -1363,6 +1525,12 @@ public class SettingsGui extends GuiScreen {
             case K_ARMOR_INGAME: cfg.armorInGameOnly = !cfg.armorInGameOnly; break;
             case K_INVENTORY_INGAME: cfg.inventoryInGameOnly = !cfg.inventoryInGameOnly; break;
             case K_KEYSTROKES_INGAME: cfg.keystrokesInGameOnly = !cfg.keystrokesInGameOnly; break;
+            case K_POTION_BG: cfg.potionBackgroundEnabled = !cfg.potionBackgroundEnabled; break;
+            case K_ARMOR_BG: cfg.armorBackgroundEnabled = !cfg.armorBackgroundEnabled; break;
+            case K_INFO_BG: cfg.infoBackgroundEnabled = !cfg.infoBackgroundEnabled; break;
+            case K_INVENTORY_BG: cfg.inventoryBackgroundEnabled = !cfg.inventoryBackgroundEnabled; break;
+            case K_GENTIMERS_BG: cfg.genTimersBackgroundEnabled = !cfg.genTimersBackgroundEnabled; break;
+            case K_KEYSTROKES_BG: cfg.keystrokesBackgroundEnabled = !cfg.keystrokesBackgroundEnabled; break;
             case K_BLOCKOVERLAY: cfg.blockOverlayEnabled = !cfg.blockOverlayEnabled; break;
             case K_SEETHROUGH: cfg.blockOverlaySeeThrough = !cfg.blockOverlaySeeThrough; break;
             case K_HANDPOS: cfg.handPositionEnabled = !cfg.handPositionEnabled; break;
@@ -1382,6 +1550,7 @@ public class SettingsGui extends GuiScreen {
         if (kind == K_TNTRADIUS) return tntRadiusIndex(cfg.tntFuseRadius);
         if (kind == K_SCOREBOARD_SIZE) return cfg.scoreboardSize;
         if (kind == K_STYLEDTAB_SIZE) return cfg.styledTabListSize;
+        if (kind == K_HUDFONT) return cfg.hudFont;
         return cfg.hudDisplayMode;
     }
 
@@ -1419,29 +1588,29 @@ public class SettingsGui extends GuiScreen {
         return dr * dr + dg * dg + db * db;
     }
 
-    private static void step(ClientSettings cfg, int kind, int dir, int n) {
+    /** Sets a stepper to a specific option index (chosen from the dropdown menu). */
+    private static void setStepperIndex(ClientSettings cfg, int kind, int idx) {
         if (kind == K_GUISIZE) {
-            cfg.guiSize = (cfg.guiSize + dir + n) % n;
+            cfg.guiSize = idx;
         } else if (kind == K_HUDSIZE) {
-            cfg.defaultTextSize = (cfg.defaultTextSize + dir + n) % n;
+            cfg.defaultTextSize = idx;
             cfg.applyDefaultTextSize();
         } else if (kind == K_DISPLAY) {
-            cfg.hudDisplayMode = (cfg.hudDisplayMode + dir + n) % n;
+            cfg.hudDisplayMode = idx;
         } else if (kind == K_OVERLAYSTYLE) {
-            cfg.blockOverlayStyle = (cfg.blockOverlayStyle + dir + n) % n;
+            cfg.blockOverlayStyle = idx;
         } else if (kind == K_OVERLAYCOLOR) {
-            int idx = (overlayColorIndex(cfg.blockOverlayColor) + dir + n) % n;
             cfg.blockOverlayColor = (cfg.blockOverlayColor & 0xFF000000) | OVERLAY_COLOR_RGB[idx];
         } else if (kind == K_OVERLAYOPACITY) {
-            int idx = (overlayOpacityIndex(cfg.blockOverlayColor) + dir + n) % n;
             cfg.blockOverlayColor = (cfg.blockOverlayColor & 0x00FFFFFF) | (OVERLAY_ALPHA[idx] << 24);
         } else if (kind == K_TNTRADIUS) {
-            int idx = (tntRadiusIndex(cfg.tntFuseRadius) + dir + n) % n;
             cfg.tntFuseRadius = TNT_RADIUS_VALUES[idx];
         } else if (kind == K_SCOREBOARD_SIZE) {
-            cfg.scoreboardSize = (cfg.scoreboardSize + dir + n) % n;
+            cfg.scoreboardSize = idx;
         } else if (kind == K_STYLEDTAB_SIZE) {
-            cfg.styledTabListSize = (cfg.styledTabListSize + dir + n) % n;
+            cfg.styledTabListSize = idx;
+        } else if (kind == K_HUDFONT) {
+            cfg.hudFont = idx;
         }
     }
 
@@ -1759,6 +1928,7 @@ public class SettingsGui extends GuiScreen {
         commitSliderEdit();
         capturingKb = -1;
         capturingDummyKey = false;
+        closeDropdown();
     }
 
     private void editMessageKey(char typedChar, int keyCode) {

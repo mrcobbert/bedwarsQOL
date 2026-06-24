@@ -10,6 +10,8 @@ public class ClientSettings {
     public int defaultTextSize = 1;
     /** Global Text/Image style for every HUD element that supports it. 0 = text, 1 = icons + numbers. */
     public int hudDisplayMode = 1;
+    /** Font for HUD text. 0 = modern (bundled Inter atlas), 1 = vanilla Minecraft font. */
+    public int hudFont = 0;
     /** Size of the settings GUI panel. 0 = small, 1 = medium, 2 = large. */
     public int guiSize = 2;
 
@@ -20,6 +22,8 @@ public class ClientSettings {
     public int potionHudY = 5;
     public int potionHudAnchor = 0;
     public float potionHudScale = 1.0f;
+    /** Draw a modern translucent panel behind this HUD element. */
+    public boolean potionBackgroundEnabled = false;
 
     public boolean armorTypeEnabled = true;
     public boolean armorInGameOnly = false;
@@ -27,12 +31,14 @@ public class ClientSettings {
     public int armorHudY = 34;
     public int armorHudAnchor = 0;
     public float armorHudScale = 1.0f;
+    public boolean armorBackgroundEnabled = false;
 
     public boolean infoEnabled = false;
     public int infoHudX = 5;
     public int infoHudY = 58;
     public int infoHudAnchor = 0;
     public float infoHudScale = 1.0f;
+    public boolean infoBackgroundEnabled = false;
 
     // --- BedWars HUDs (only render in an active BedWars game) ---
 
@@ -42,9 +48,12 @@ public class ClientSettings {
     public int inventoryHudY = 5;
     public int inventoryHudAnchor = 6; // bottom-left by default
     public float inventoryHudScale = 1.0f;
+    public boolean inventoryBackgroundEnabled = false;
 
     // One toggle controls both gen timers; each stays independently draggable below.
     public boolean genTimersEnabled = false;
+    /** One shared toggle: draws a matching panel behind BOTH the diamond and emerald timer boxes. */
+    public boolean genTimersBackgroundEnabled = false;
     public int diamondTimerHudX = 5;
     public int diamondTimerHudY = 5;
     public int diamondTimerHudAnchor = 2; // top-right by default
@@ -61,6 +70,7 @@ public class ClientSettings {
     public int keystrokesHudY = -20;
     public int keystrokesHudAnchor = 8; // bottom-right by default
     public float keystrokesHudScale = 1.0f;
+    public boolean keystrokesBackgroundEnabled = false;
 
     public boolean playerStats = false;
     /** Nametag/tab stat overlays no longer have toggles — forced on with Player Stats (see sanitize). */
@@ -138,6 +148,7 @@ public class ClientSettings {
     public void sanitize() {
         defaultTextSize = clamp(defaultTextSize, 0, 2);
         hudDisplayMode = clamp(hudDisplayMode, 0, 1);
+        hudFont = clamp(hudFont, 0, 1);
         guiSize = clamp(guiSize, 0, 2);
         potionHudAnchor = clamp(potionHudAnchor, 0, 8);
         armorHudAnchor = clamp(armorHudAnchor, 0, 8);

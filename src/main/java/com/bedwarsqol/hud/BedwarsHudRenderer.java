@@ -45,7 +45,21 @@ public class BedwarsHudRenderer {
     public static final String KEYSTROKES_HUD = "keystrokes";
     private static final int INV_COLS = 9;
     private static final int INV_ROWS = 3; // storage rows only — the hotbar is already on screen
-    private static final float INV_CELL = 18f;
+    // Inventory grid geometry (local pre-scale units). ONE gutter value (INV_GAP) is used everywhere:
+    // between adjacent tiles AND between the panel edge and the outer tiles, so every gap is identical.
+    // Tiles are sized larger than the 16px item (INV_ITEM_PAD breathing room on every side) so item
+    // sprites never touch the tile corners. The cell-to-cell pitch and the panel extent both derive
+    // from these — no independent magic numbers, so the spacing stays definitively consistent.
+    private static final float INV_ITEM = 16f;        // vanilla item icon size (renderItemIntoGUI draws 16x16)
+    private static final float INV_GAP = 2f;           // the single consistent gutter (tile↔tile and panel-edge↔tile)
+    private static final float INV_ITEM_PAD = 2f;      // breathing room between a tile's inner edge and the item, all sides
+    private static final float INV_TILE = INV_ITEM + 2f * INV_ITEM_PAD;  // 20px slot tile
+    private static final float INV_PITCH = INV_TILE + INV_GAP;           // 22px cell-to-cell step
+    // Recessed-slot bevel — vanilla-flavored but expressed as subtle overlays on the dark HUD panel:
+    // a faint light face, a darker top/left inner shadow, and a whisper-light bottom/right highlight.
+    private static final int INV_SLOT_FILL = 0x33FFFFFF;       // ~20% white tile face: a clear lighter gray slot over the darker panel
+    private static final int INV_SLOT_SHADOW = 0x40000000;     // ~25% black inner shadow on top + left edges
+    private static final int INV_SLOT_HIGHLIGHT = 0x18FFFFFF;  // ~9% white highlight on bottom + right edges
     private static final float[] ANCHOR_X = {0f, 0.5f, 1f, 0f, 0.5f, 1f, 0f, 0.5f, 1f};
     private static final float[] ANCHOR_Y = {0f, 0f, 0f, 0.5f, 0.5f, 0.5f, 1f, 1f, 1f};
 
@@ -66,10 +80,19 @@ public class BedwarsHudRenderer {
     private static final float KS_GAP = 2f;       // gap between caps
     private static final float KS_SPACE_H = 14f;  // spacebar height (a bit shorter than the WASD caps)
     private static final float KS_LETTER = 1.0f;  // letter scale within a cap
-    private static final int KS_FILL_OFF = 0x70202020;   // translucent dark cap (idle)
-    private static final int KS_FILL_ON = 0x40FFFFFF;    // subtle highlight cap (pressed)
+    // Qualified ref (HUD_BG_FILL is declared further down) — tracks the (now darker) HUD background panel.
+    private static final int KS_FILL_OFF = BedwarsHudRenderer.HUD_BG_FILL;  // idle cap over the world
+    private static final int KS_FILL_OFF_PANEL = 0x26FFFFFF; // idle cap when the BG panel is on: faint light so keys stay visible against the dark panel
+    private static final int KS_FILL_ON = 0x40FFFFFF;        // subtle highlight cap (pressed)
     private static final int KS_TEXT_OFF = 0xFFEDEDED;   // light letter on dark cap
     private static final int KS_TEXT_ON = 0xFFFFFFFF;    // letter brightens when pressed
+
+    // ----- Optional per-module "Background" panel -----
+    // A flat, square-cornered translucent dark panel behind a HUD element (no border, no corner
+    // radius). One consistent grayscale treatment for every module, built on Theme.PANEL_HUD — the
+    // HUD-overlay fill the mod's palette reserves for over-the-world panels (scoreboard/tab list).
+    // Padding scales with the element so it stays proportionate.
+    private static final int HUD_BG_FILL = 0xD0121212;   // darker than Theme.PANEL_HUD (0xB01A1A1A): more opaque (alpha 0xB0->0xD0) + lower RGB
 
     @SubscribeEvent
     public void onRenderText(RenderGameOverlayEvent.Text event) {
@@ -89,6 +112,7 @@ public class BedwarsHudRenderer {
     public static List<HudBox> getHudBoxes(Minecraft mc, ClientSettings cfg, boolean example) {
         if (mc == null || cfg == null) return Collections.emptyList();
         cfg.sanitize();
+        hudVanillaFont = cfg.hudFont == 1;
 
         List<HudBox> boxes = new ArrayList<>(8);
         addBox(boxes, potionBox(mc, cfg, example));
@@ -141,6 +165,7 @@ public class BedwarsHudRenderer {
     }
 
     private static void render(Minecraft mc, ClientSettings cfg, boolean example) {
+        hudVanillaFont = cfg.hudFont == 1;
         if (cfg.potionStatusEnabled) drawPotionHud(mc, cfg, example);
         if (cfg.armorTypeEnabled) drawArmorHud(mc, cfg, example);
         if (cfg.infoEnabled) drawInfoHud(mc, cfg, example);
@@ -150,9 +175,28 @@ public class BedwarsHudRenderer {
         if (cfg.keystrokesEnabled) drawKeystrokesHud(mc, cfg, example);
     }
 
+    /**
+     * The optional per-module "Background": a flat, square translucent panel (no corner radius, no
+     * border) behind a HUD element's content box expanded by a scale-aware padding. Drawn in GUI space
+     * BEFORE the element's content (and before any {@code pushMatrix}/scale used for item rendering).
+     * {@code GuiRender.rect} is self-contained for GL state, so the content draw that follows gets a
+     * clean (texturing on, color white) state.
+     */
+    private static void drawHudBackground(HudBox box, float scale, int fill) {
+        int pad = Math.max(2, Math.round(4f * scale));
+        float x1 = box.x - pad, y1 = box.y - pad;
+        float x2 = box.right() + pad, y2 = box.bottom() + pad;
+        GuiRender.rect(x1, y1, x2, y2, fill);
+    }
+
+    private static void drawHudBackground(HudBox box, float scale) {
+        drawHudBackground(box, scale, HUD_BG_FILL);
+    }
+
     private static void drawPotionHud(Minecraft mc, ClientSettings cfg, boolean example) {
         HudBox box = potionBox(mc, cfg, example);
         if (box == null) return;
+        if (cfg.potionBackgroundEnabled) drawHudBackground(box, cfg.potionHudScale);
         if (cfg.hudDisplayMode == 1) {
             List<PotionEntry> entries = potionEntries(mc, example);
             if (!entries.isEmpty()) drawPotionImages(mc, cfg, entries, box.x, box.y);
@@ -168,6 +212,7 @@ public class BedwarsHudRenderer {
         if (box == null) return;
         ItemStack leggings = currentLeggings(mc, example);
         if (leggings == null) return;
+        if (cfg.armorBackgroundEnabled) drawHudBackground(box, cfg.armorHudScale);
 
         if (cfg.hudDisplayMode == 1) {
             drawArmorIcon(mc, cfg, leggings, box.x, box.y);
@@ -183,6 +228,7 @@ public class BedwarsHudRenderer {
     private static void drawInfoHud(Minecraft mc, ClientSettings cfg, boolean example) {
         HudBox box = infoBox(mc, cfg, example);
         if (box == null) return;
+        if (cfg.infoBackgroundEnabled) drawHudBackground(box, cfg.infoHudScale);
         drawLines(mc.fontRendererObj, infoLines(mc, example), box.x, box.y, cfg.infoHudScale);
     }
 
@@ -242,7 +288,7 @@ public class BedwarsHudRenderer {
             float ly = y + i * lineStep;
             drawScaledString(fr, line.primary, x, ly, scale);
             if (!line.secondary.isEmpty()) {
-                float secX = x + BedwarsQolFont.width(line.primary) * scale + gap;
+                float secX = x + fontWidth(line.primary) * scale + gap;
                 drawScaledString(fr, line.secondary, secX, ly + secondaryYOffset, secondaryScale);
             }
         }
@@ -300,9 +346,44 @@ public class BedwarsHudRenderer {
         resetGlState();
     }
 
+    // ----- HUD font: modern Inter atlas (default) or the vanilla Minecraft font, chosen in Settings -----
+    // Cached at each render/measure entry (render(), getHudBoxes) so the width + draw helpers agree within
+    // a frame. Client rendering is single-threaded, so the shared static is safe.
+    private static boolean hudVanillaFont = false;
+
+    /** Width of {@code text} at scale 1.0 in the active HUD font (multiply by your scale at the call site). */
+    private static float fontWidth(String text) {
+        if (hudVanillaFont) {
+            FontRenderer fr = Minecraft.getMinecraft().fontRendererObj;
+            return fr == null ? 0f : fr.getStringWidth(text);
+        }
+        return BedwarsQolFont.width(text);
+    }
+
+    /** Line height at {@code scale}; both fonts are ~9px tall at scale 1.0. */
+    private static float fontHeight(float scale) {
+        return hudVanillaFont ? 9f * scale : BedwarsQolFont.height(scale);
+    }
+
+    /** Draw {@code text} with its top-left at (x,y), scaled about that origin, in the active HUD font. */
+    private static void fontDraw(String text, float x, float y, float scale, int color, BedwarsQolFont.Weight weight) {
+        if (hudVanillaFont) {
+            FontRenderer fr = Minecraft.getMinecraft().fontRendererObj;
+            if (fr == null) return;
+            GlStateManager.pushMatrix();
+            GlStateManager.translate(x, y, 0f);
+            GlStateManager.scale(scale, scale, 1f);
+            fr.drawString(text, 0, 0, color);
+            GlStateManager.popMatrix();
+            resetGlState();
+        } else {
+            BedwarsQolFont.draw(text, x, y, scale, color, false, weight);
+        }
+    }
+
     private static void drawScaledString(FontRenderer fr, String text, float x, float y, float scale) {
-        // Inter SemiBold via the baked atlas — HUD text reads clearly bold over the world.
-        BedwarsQolFont.draw(text, x, y, scale, TEXT_COLOR, false, BedwarsQolFont.Weight.BOLD);
+        // Modern Inter SemiBold (default) or the vanilla Minecraft font, per the HUD "Font" setting.
+        fontDraw(text, x, y, scale, TEXT_COLOR, BedwarsQolFont.Weight.BOLD);
     }
 
     private static Size potionSize(Minecraft mc, ClientSettings cfg, boolean example) {
@@ -314,7 +395,7 @@ public class BedwarsHudRenderer {
             FontRenderer fr = mc.fontRendererObj;
             if (fr != null) {
                 for (PotionEntry entry : entries) {
-                    maxTextWidth = Math.max(maxTextWidth, BedwarsQolFont.width(entry.timer) * cfg.potionHudScale);
+                    maxTextWidth = Math.max(maxTextWidth, fontWidth(entry.timer) * cfg.potionHudScale);
                 }
             }
             float width = POTION_ICON_SIZE * cfg.potionHudScale + POTION_ICON_TIMER_GAP * cfg.potionHudScale + maxTextWidth;
@@ -456,9 +537,9 @@ public class BedwarsHudRenderer {
 
     private static float lineWidth(FontRenderer fr, Line line) {
         if (fr == null) return 0f;
-        float width = BedwarsQolFont.width(line.primary);
+        float width = fontWidth(line.primary);
         if (!line.secondary.isEmpty()) {
-            width += SECONDARY_GAP + BedwarsQolFont.width(line.secondary) * SECONDARY_SCALE;
+            width += SECONDARY_GAP + fontWidth(line.secondary) * SECONDARY_SCALE;
         }
         return width;
     }
@@ -484,7 +565,7 @@ public class BedwarsHudRenderer {
         return null;
     }
 
-    // ----- BedWars HUDs (mini inventory, diamond/emerald timers w/ gen tier) -----
+    // ----- BedWars HUDs (mini inventory, diamond/emerald spawn timers) -----
 
     /** These overlays only make sense inside an active BedWars game; the edit preview bypasses it. */
     private static boolean bedwarsActive(boolean example) {
@@ -495,8 +576,8 @@ public class BedwarsHudRenderer {
         if (!cfg.inventoryHudEnabled) return null; // works anywhere unless "In Game Only" is set
         if (cfg.inventoryInGameOnly && !bedwarsActive(example)) return null;
         float scale = cfg.inventoryHudScale;
-        float width = INV_COLS * INV_CELL * scale;
-        float height = INV_ROWS * INV_CELL * scale;
+        float width = invPanelWidth() * scale;
+        float height = invPanelHeight() * scale;
         ScaledResolution r = new ScaledResolution(mc);
         float x = absoluteX(cfg.inventoryHudX, cfg.inventoryHudAnchor, width, r.getScaledWidth());
         float y = absoluteY(cfg.inventoryHudY, cfg.inventoryHudAnchor, height, r.getScaledHeight());
@@ -506,6 +587,8 @@ public class BedwarsHudRenderer {
     private static void drawInventoryHud(Minecraft mc, ClientSettings cfg, boolean example) {
         HudBox box = inventoryBox(mc, cfg, example);
         if (box == null) return;
+        // The panel + recessed slot grid are drawn inside drawMiniInventory's scaled matrix, so every
+        // gap (the panel margin and the inter-slot gutter alike) lives in one local space and scales as one.
         drawMiniInventory(mc, cfg, box.x, box.y, example);
     }
 
@@ -513,13 +596,16 @@ public class BedwarsHudRenderer {
         float scale = cfg.inventoryHudScale;
         ItemStack[] slots = miniInventorySlots(mc, example);
 
-        // No cell backgrounds — just the item icons, so it stays low-key and doesn't block the view.
         RenderItem ri = mc.getRenderItem();
         FontRenderer fr = mc.fontRendererObj;
         if (ri == null) return;
         GlStateManager.pushMatrix();
         GlStateManager.translate(x, y, 0f);
         GlStateManager.scale(scale, scale, 1f);
+        // With the Background on, draw the dark panel and the recessed slot grid first (flat shapes,
+        // self-contained GL state) so the items render on top. Panel margin and inter-slot gutters are
+        // all INV_GAP, so the spacing reads as one consistent system.
+        if (cfg.inventoryBackgroundEnabled) drawInventoryPanel();
         GlStateManager.enableDepth();
         GlStateManager.enableRescaleNormal();
         RenderHelper.enableGUIStandardItemLighting();
@@ -528,8 +614,9 @@ public class BedwarsHudRenderer {
         for (int i = 0; i < slots.length; i++) {
             ItemStack stack = slots[i];
             if (stack == null) continue;
-            int px = Math.round((i % INV_COLS) * INV_CELL) + 1;
-            int py = Math.round((i / INV_COLS) * INV_CELL) + 1;
+            // Center the 16px item inside its tile: tile origin (INV_GAP + col*INV_PITCH) + INV_ITEM_PAD.
+            int px = Math.round(INV_GAP + INV_ITEM_PAD + (i % INV_COLS) * INV_PITCH);
+            int py = Math.round(INV_GAP + INV_ITEM_PAD + (i / INV_COLS) * INV_PITCH);
             ri.renderItemIntoGUI(stack, px, py);
             if (fr != null) ri.renderItemOverlayIntoGUI(fr, stack, px, py, null);
         }
@@ -538,6 +625,38 @@ public class BedwarsHudRenderer {
         GlStateManager.disableRescaleNormal();
         GlStateManager.popMatrix();
         resetGlState();
+    }
+
+    /** Local-space (pre-scale) extent of the whole inventory panel, gutters included. */
+    private static float invPanelWidth() { return INV_COLS * INV_PITCH + INV_GAP; }
+    private static float invPanelHeight() { return INV_ROWS * INV_PITCH + INV_GAP; }
+
+    /**
+     * The Background panel: a flat dark fill (matching every other module) plus a 9x3 grid of recessed
+     * slot tiles. Everything is laid out from INV_GAP/INV_PITCH, so the outer panel margin equals the
+     * gutter between tiles. Drawn in the inventory HUD's local (pre-scaled) space.
+     */
+    private static void drawInventoryPanel() {
+        GuiRender.rect(0f, 0f, invPanelWidth(), invPanelHeight(), HUD_BG_FILL);
+        for (int r = 0; r < INV_ROWS; r++) {
+            for (int c = 0; c < INV_COLS; c++) {
+                drawSlotTile(INV_GAP + c * INV_PITCH, INV_GAP + r * INV_PITCH);
+            }
+        }
+    }
+
+    /**
+     * One recessed slot tile at local (tx, ty): a faint light face, a darker top/left inner shadow and a
+     * whisper-light bottom/right highlight — the vanilla "pressed-in" slot look, in subtle dark-theme
+     * overlays. 1px edges (local units) keep it crisp without a heavy border.
+     */
+    private static void drawSlotTile(float tx, float ty) {
+        float x2 = tx + INV_TILE, y2 = ty + INV_TILE;
+        GuiRender.rect(tx, ty, x2, y2, INV_SLOT_FILL);             // tile face
+        GuiRender.rect(tx, ty, x2, ty + 1f, INV_SLOT_SHADOW);      // top inner shadow
+        GuiRender.rect(tx, ty, tx + 1f, y2, INV_SLOT_SHADOW);      // left inner shadow
+        GuiRender.rect(tx, y2 - 1f, x2, y2, INV_SLOT_HIGHLIGHT);   // bottom highlight
+        GuiRender.rect(x2 - 1f, ty, x2, y2, INV_SLOT_HIGHLIGHT);   // right highlight
     }
 
     /** The three storage rows of the inventory (main slots 9..35). The hotbar is excluded. */
@@ -589,6 +708,8 @@ public class BedwarsHudRenderer {
         HudBox box = timerBox(mc, cfg, example, diamond);
         if (box == null) return;
         float scale = diamond ? cfg.diamondTimerHudScale : cfg.emeraldTimerHudScale;
+        // One shared "Gen Timers" toggle gates both boxes; each draws its own matching panel.
+        if (cfg.genTimersBackgroundEnabled) drawHudBackground(box, scale);
         if (cfg.hudDisplayMode == 1) {
             drawIconCounts(mc, Collections.singletonList(timerEntry(example, diamond)), box.x, box.y, scale);
         } else {
@@ -604,14 +725,11 @@ public class BedwarsHudRenderer {
         return new Line(diamond ? "Diamond" : "Emerald", timerValue(example, diamond));
     }
 
-    /** Tier numeral then countdown, e.g. "II 23s" — rendered to the right of the gem icon. */
+    /** Just the spawn countdown, e.g. "23s" — rendered to the right of the gem icon. */
     private static String timerValue(boolean example, boolean diamond) {
-        if (example) return diamond ? "II 23s" : "I 47s";
+        if (example) return diamond ? "23s" : "47s";
         int s = diamond ? GeneratorTracker.diamondSeconds() : GeneratorTracker.emeraldSeconds();
-        int tier = diamond ? GeneratorTracker.diamondTier() : GeneratorTracker.emeraldTier();
-        String time = s < 0 ? "--" : s + "s";
-        String numeral = tier >= 1 && tier <= ROMAN.length ? ROMAN[tier - 1] : "";
-        return numeral.isEmpty() ? time : numeral + " " + time;
+        return s < 0 ? "--" : s + "s";
     }
 
     // ----- Keystrokes (WASD + spacebar) -----
@@ -632,6 +750,11 @@ public class BedwarsHudRenderer {
         HudBox box = keystrokesBox(mc, cfg, example);
         if (box == null) return;
         boolean[] st = keyStates(mc, example);
+        // Same panel fill as every other module. The caps are translucent-dark, so over this dark panel
+        // they'd disappear — switch their idle fill to a faint light so the keys read as raised caps.
+        boolean onPanel = cfg.keystrokesBackgroundEnabled;
+        if (onPanel) drawHudBackground(box, cfg.keystrokesHudScale);
+        int idleFill = onPanel ? KS_FILL_OFF_PANEL : KS_FILL_OFF;
 
         // Draw everything in local (unscaled) coordinates under one translate+scale, so the caps and
         // letters scale together through the modelview matrix.
@@ -642,36 +765,36 @@ public class BedwarsHudRenderer {
         float col = KS_UNIT + KS_GAP;
         float row2 = KS_UNIT + KS_GAP;
         float row3 = row2 + KS_UNIT + KS_GAP;
-        drawKeyCap(col, 0f, KS_UNIT, KS_UNIT, "W", st[0]);
-        drawKeyCap(0f, row2, KS_UNIT, KS_UNIT, "A", st[1]);
-        drawKeyCap(col, row2, KS_UNIT, KS_UNIT, "S", st[2]);
-        drawKeyCap(2f * col, row2, KS_UNIT, KS_UNIT, "D", st[3]);
+        drawKeyCap(col, 0f, KS_UNIT, KS_UNIT, "W", st[0], idleFill);
+        drawKeyCap(0f, row2, KS_UNIT, KS_UNIT, "A", st[1], idleFill);
+        drawKeyCap(col, row2, KS_UNIT, KS_UNIT, "S", st[2], idleFill);
+        drawKeyCap(2f * col, row2, KS_UNIT, KS_UNIT, "D", st[3], idleFill);
         float spaceW = 3f * KS_UNIT + 2f * KS_GAP;
-        drawKeyCap(0f, row3, spaceW, KS_SPACE_H, "", st[4]);
+        drawKeyCap(0f, row3, spaceW, KS_SPACE_H, "", st[4], idleFill);
         drawSpaceSymbol(0f, row3, spaceW, KS_SPACE_H, st[4]);
 
         GlStateManager.popMatrix();
         resetGlState();
     }
 
-    private static void drawKeyCap(float x, float y, float w, float h, String label, boolean pressed) {
+    private static void drawKeyCap(float x, float y, float w, float h, String label, boolean pressed, int idleFill) {
         float radius = Math.min(3f, Math.min(w, h) * 0.25f);
-        GuiRender.roundedRect(x, y, x + w, y + h, radius, pressed ? KS_FILL_ON : KS_FILL_OFF);
+        GuiRender.roundedRect(x, y, x + w, y + h, radius, pressed ? KS_FILL_ON : idleFill);
         if (!label.isEmpty()) {
-            float tw = BedwarsQolFont.width(label, KS_LETTER, BedwarsQolFont.Weight.BOLD);
+            float tw = fontWidth(label) * KS_LETTER;
             float tx = x + (w - tw) / 2f;
-            float ty = y + (h - BedwarsQolFont.height(KS_LETTER)) / 2f;
-            BedwarsQolFont.draw(label, tx, ty, KS_LETTER, pressed ? KS_TEXT_ON : KS_TEXT_OFF, false, BedwarsQolFont.Weight.BOLD);
+            float ty = y + (h - fontHeight(KS_LETTER)) / 2f;
+            fontDraw(label, tx, ty, KS_LETTER, pressed ? KS_TEXT_ON : KS_TEXT_OFF, BedwarsQolFont.Weight.BOLD);
         }
     }
 
-    /** A centered horizontal bar standing in for the space key's label. */
+    /** A centered horizontal bar (thin, square corners) standing in for the space key's label. */
     private static void drawSpaceSymbol(float x, float y, float w, float h, boolean pressed) {
         float barW = w * 0.34f;
-        float barH = Math.max(1f, h * 0.08f);
+        float barH = Math.max(1f, h * 0.045f);
         float bx1 = x + (w - barW) / 2f;
         float by1 = y + (h - barH) / 2f;
-        GuiRender.roundedRect(bx1, by1, bx1 + barW, by1 + barH, barH / 2f, pressed ? KS_TEXT_ON : KS_TEXT_OFF);
+        GuiRender.rect(bx1, by1, bx1 + barW, by1 + barH, pressed ? KS_TEXT_ON : KS_TEXT_OFF);
     }
 
     /** {W, A, S, D, Space} held state, following the player's actual movement binds. */
@@ -736,7 +859,7 @@ public class BedwarsHudRenderer {
         FontRenderer fr = mc.fontRendererObj;
         if (fr != null) {
             for (IconCount e : entries) {
-                if (!e.count.isEmpty()) maxText = Math.max(maxText, BedwarsQolFont.width(e.count) * scale);
+                if (!e.count.isEmpty()) maxText = Math.max(maxText, fontWidth(e.count) * scale);
             }
         }
         float width = iconSize + (maxText > 0f ? gap + maxText : 0f);

@@ -18,9 +18,8 @@ import java.util.List;
 
 public class EditHudGui extends GuiScreen {
 
-    private static final int HANDLE_SIZE = 8;
+    private static final int HANDLE_SIZE = 4;
     private static final int SNAP_DISTANCE = 10;
-    private static final int OUTLINE = 0x66FFFFFF;       // unselected box: faint white hairline
     private static final int SELECTED = 0xFFFFFFFF;      // selected box: solid white
     private static final int SELECTED_FILL = 0x1AFFFFFF; // selected fill: ~10% white
     private static final int SNAP_LINE = 0xFFBFBFBF;     // snap guide: light gray
@@ -54,15 +53,14 @@ public class EditHudGui extends GuiScreen {
         if (hasSnapX) drawRect(Math.round(snapX), 0, Math.round(snapX) + 1, height, SNAP_LINE);
         if (hasSnapY) drawRect(0, Math.round(snapY), width, Math.round(snapY) + 1, SNAP_LINE);
 
+        // Only the selected element is framed (fill + solid outline + scale handle). Unselected
+        // elements show no box — the HUD preview itself is enough to see and click them.
         List<HudBox> boxes = BedwarsHudRenderer.getHudBoxes(mc, cfg, true);
         for (HudBox box : boxes) {
-            boolean selected = box.id.equals(selectedId);
-            int color = selected ? SELECTED : OUTLINE;
-            if (selected) {
-                drawRect(Math.round(box.x) - 3, Math.round(box.y) - 3, Math.round(box.right()) + 3, Math.round(box.bottom()) + 3, SELECTED_FILL);
-            }
-            drawOutline(box, color, selected ? 2 : 1);
-            if (selected) drawScaleHandle(box);
+            if (!box.id.equals(selectedId)) continue;
+            drawRect(Math.round(box.x) - 3, Math.round(box.y) - 3, Math.round(box.right()) + 3, Math.round(box.bottom()) + 3, SELECTED_FILL);
+            drawOutline(box, SELECTED, 1);
+            drawScaleHandle(box);
         }
 
         float[] rb = resetButtonRect();

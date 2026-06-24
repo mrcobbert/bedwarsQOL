@@ -125,6 +125,55 @@ public final class GuiRender {
         fringeEdge(x2, y1 + radius, x2, y2 - radius, 1f, 0f, color);  // right
     }
 
+    /**
+     * Rounded-rectangle fill with independent per-corner radii (corner order TL, TR, BR, BL — the
+     * same ordering the corner fans use elsewhere in this class). Same look and conventions as the
+     * uniform {@link #roundedRect(float,float,float,float,float,int)}: ARGB color, AA-feathered
+     * edges, no NanoVG. A corner whose radius is {@code <= 0.5} is drawn square. The interior is
+     * tiled by a full-width middle band + top/bottom strips + four corner pieces so every pixel is
+     * covered EXACTLY ONCE — essential for translucent colors, which would seam or darken on any
+     * overlap. Used for the dropdown highlight, which rounds only the corners that touch the menu's
+     * rounded border (top two on the first row, bottom two on the last).
+     */
+    public static void roundedRect(float x1, float y1, float x2, float y2,
+                                   float rTL, float rTR, float rBR, float rBL, int color) {
+        if (x1 > x2) { float t = x1; x1 = x2; x2 = t; }
+        if (y1 > y2) { float t = y1; y1 = y2; y2 = t; }
+        float maxR = Math.min(x2 - x1, y2 - y1) / 2f;
+        float tl = snapCorner(rTL, maxR), tr = snapCorner(rTR, maxR);
+        float br = snapCorner(rBR, maxR), bl = snapCorner(rBL, maxR);
+        if (tl == 0f && tr == 0f && br == 0f && bl == 0f) {
+            rect(x1, y1, x2, y2, color);
+            return;
+        }
+        float topBand = Math.max(tl, tr);
+        float botBand = Math.max(bl, br);
+        rect(x1, y1 + topBand, x2, y2 - botBand, color);                  // middle band (full width)
+        if (topBand > 0f) rect(x1 + tl, y1, x2 - tr, y1 + topBand, color); // top strip (between top arcs)
+        if (botBand > 0f) rect(x1 + bl, y2 - botBand, x2 - br, y2, color); // bottom strip
+        if (tl < topBand) rect(x1, y1 + tl, x1 + tl, y1 + topBand, color); // fill below the shorter TL arc
+        if (tr < topBand) rect(x2 - tr, y1 + tr, x2, y1 + topBand, color); // ... shorter TR
+        if (bl < botBand) rect(x1, y2 - botBand, x1 + bl, y2 - bl, color); // ... shorter BL
+        if (br < botBand) rect(x2 - br, y2 - botBand, x2, y2 - br, color); // ... shorter BR
+        if (tl > 0f) cornerFan(x1 + tl, y1 + tl, tl, 180f, color);        // top-left
+        if (tr > 0f) cornerFan(x2 - tr, y1 + tr, tr, 270f, color);        // top-right
+        if (br > 0f) cornerFan(x2 - br, y2 - br, br, 0f, color);          // bottom-right
+        if (bl > 0f) cornerFan(x1 + bl, y2 - bl, bl, 90f, color);         // bottom-left
+        // Straight-edge AA fringes (each spans between its two corner insets; meets the square
+        // corners' adjacent fringe at the apex, and the rounded corners' fringeArc at the tangent).
+        fringeEdge(x1 + tl, y1, x2 - tr, y1, 0f, -1f, color); // top
+        fringeEdge(x1 + bl, y2, x2 - br, y2, 0f, 1f, color);  // bottom
+        fringeEdge(x1, y1 + tl, x1, y2 - bl, -1f, 0f, color); // left
+        fringeEdge(x2, y1 + tr, x2, y2 - br, 1f, 0f, color);  // right
+    }
+
+    /** Sub-pixel radii collapse to a square corner (matching {@link #roundedRect}'s {@code <=0.5}
+     *  fallback); otherwise clamp so the corner never exceeds half the smaller side. */
+    private static float snapCorner(float r, float maxR) {
+        if (r <= 0.5f) return 0f;
+        return Math.min(r, maxR);
+    }
+
     private static void cornerFan(float cx, float cy, float radius, float startDeg, int color) {
         int seg = Math.max(8, Math.round(radius * 1.5f)); // enough segments so the curve isn't faceted
         beginShapes();
