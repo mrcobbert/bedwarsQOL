@@ -30,7 +30,8 @@ public final class Theme {
     public static final int TEXT_MID = 0xFFB0B0B0;
     public static final int TEXT_LO = 0xFF7A7A7A;
 
-    /** Panel corner radius (px) and the hairline border/outline thickness. */
-    public static final int PANEL_R = 8;
+    /** Panel corner radius (px) and the hairline border/outline thickness. Kept tight for a sleek,
+     *  near-square modern look (only the settings-GUI panel consumes this). */
+    public static final int PANEL_R = 3;
     public static final float BORDER_THICK = 0.75f;
 }

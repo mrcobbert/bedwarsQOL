@@ -51,6 +51,23 @@ public final class BedwarsQolFont {
         return PX_LINE * scale;
     }
 
+    /** Top offset (px at {@code scale}) of a capital glyph within the line box — the empty gap above the
+     *  caps. With {@link #capHeight} this gives the visible (cap-top → baseline) bounds, so callers can
+     *  optically centre text by its visible mass instead of the full line box, which reserves unused
+     *  descender space and makes centred text read slightly high. Measured from 'H'; falls back to 0. */
+    public static float capTop(float scale, Weight weight) {
+        Face f = face(weight);
+        f.ensure();
+        return (f.ready && f.has['H']) ? f.gyo['H'] * f.k * scale : 0f;
+    }
+
+    /** Visible cap height (px at {@code scale}), measured from 'H'. Falls back to the full line height. */
+    public static float capHeight(float scale, Weight weight) {
+        Face f = face(weight);
+        f.ensure();
+        return (f.ready && f.has['H']) ? f.gh['H'] * f.k * scale : height(scale);
+    }
+
     public static float width(String s) {
         return width(s, 1f, Weight.REGULAR);
     }

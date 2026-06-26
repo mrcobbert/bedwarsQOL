@@ -5,9 +5,9 @@ import com.bedwarsqol.command.BedwarsStatsCommand;
 import com.bedwarsqol.command.BedwarsQolCommand;
 import com.bedwarsqol.config.ClientSettings;
 import com.bedwarsqol.config.SettingsManager;
+import com.bedwarsqol.feature.AutoGg;
 import com.bedwarsqol.feature.ClickTracker;
 import com.bedwarsqol.feature.TntFuseDisplay;
-import com.bedwarsqol.feature.KeybindMacros;
 import com.bedwarsqol.feature.KeybindRegistry;
 import com.bedwarsqol.feature.NametagStats;
 import com.bedwarsqol.feature.PauseKeyHandler;
@@ -31,7 +31,7 @@ public class BedwarsQol implements ModInitializer {
 
     public static final String MODID = "bedwarsqol";
     public static final String NAME = "BedwarsQOL";
-    public static final String VERSION = "0.2.0";
+    public static final String VERSION = "0.3.0";
 
     public static ClientSettings config;
 
@@ -46,9 +46,9 @@ public class BedwarsQol implements ModInitializer {
         EventBus.subscribe(new NametagStats());
         EventBus.subscribe(new BedwarsModeDetector());
         EventBus.subscribe(new SweatReport());
+        EventBus.subscribe(new AutoGg());
         EventBus.subscribe(new GeneratorTracker());
         EventBus.subscribe(new PingTracker());
-        EventBus.subscribe(new KeybindMacros());
         EventBus.subscribe(new ClickTracker());
         EventBus.subscribe(new TntFuseDisplay());
 

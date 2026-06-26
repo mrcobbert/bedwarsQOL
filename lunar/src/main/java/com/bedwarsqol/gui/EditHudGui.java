@@ -65,7 +65,7 @@ public class EditHudGui extends GuiScreen {
 
         float[] rb = resetButtonRect();
         boolean rHover = GuiRender.inside(mouseX, mouseY, rb[0], rb[1], rb[2], rb[3]);
-        GuiRender.roundedRect(rb[0], rb[1], rb[2], rb[3], 4, rHover ? 0xFF2E2E2E : 0xFF242424);
+        GuiRender.roundedRect(rb[0], rb[1], rb[2], rb[3], 2, rHover ? 0xFF2E2E2E : 0xFF242424);
         GuiRender.textCentered("Reset HUD Sizes", (rb[0] + rb[2]) / 2f,
                 rb[1] + (rb[3] - rb[1] - BedwarsQolFont.height(RESET_SCALE)) / 2f, RESET_SCALE, 0xFFEDEDED, BedwarsQolFont.Weight.MEDIUM);
 

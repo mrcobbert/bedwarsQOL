@@ -6,7 +6,7 @@ REM prints the exact line to paste into Lunar's JVM Arguments.
 
 set "DIR=%~dp0"
 set "AGENT=Weave-Loader-Agent-1.3.3.jar"
-set "MOD=BedwarsQOL-Lunar-0.2.0.jar"
+set "MOD=BedwarsQOL-Lunar-0.3.0.jar"
 
 echo.
 echo   Installing BedwarsQOL for Lunar Client...

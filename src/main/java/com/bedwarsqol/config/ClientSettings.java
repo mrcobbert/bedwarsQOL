@@ -2,9 +2,6 @@ package com.bedwarsqol.config;
 
 import org.lwjgl.input.Keyboard;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class ClientSettings {
 
     public int defaultTextSize = 1;
@@ -14,6 +11,8 @@ public class ClientSettings {
     public int hudFont = 0;
     /** Size of the settings GUI panel. 0 = small, 1 = medium, 2 = large. */
     public int guiSize = 2;
+    /** Selected module-card colour theme (index into SettingsGui.THEMES; 0 = default grayscale, no change). */
+    public int moduleTheme = 0;
 
     public boolean potionStatusEnabled = true;
     /** Only render this HUD while in an active BedWars game (off = render everywhere). */
@@ -83,6 +82,9 @@ public class ClientSettings {
     /** When in an active Bedwars game, broadcast the sweatiest enemy teams to party chat once. */
     public boolean statsSweatReport = false;
 
+    /** Auto GG: say "gg" in chat once each time a BedWars game ends. */
+    public boolean autoGg = false;
+
     // Stats come from a Cloudflare Worker that each user self-hosts (see server/stats-worker). No
     // public backend is shipped — never commit a real URL or token here. Users set their own via
     // /bedwarsqol statsurl <url> and (optionally) /bedwarsqol statstoken <token>.
@@ -104,9 +106,6 @@ public class ClientSettings {
      * the menu can be reopened via the "Open Game Menu" KeyBinding in Minecraft's Controls menu.
      */
     public boolean suppressEscMenu = false;
-
-    /** User-defined chat macros (press a key → send a message). Edited in the Keybinds section. */
-    public List<Keybind> keybinds = new ArrayList<Keybind>();
 
     // --- Visual / gameplay tweaks ---
 
@@ -150,6 +149,7 @@ public class ClientSettings {
         hudDisplayMode = clamp(hudDisplayMode, 0, 1);
         hudFont = clamp(hudFont, 0, 1);
         guiSize = clamp(guiSize, 0, 2);
+        if (moduleTheme < 0) moduleTheme = 0; // upper bound clamped GUI-side against THEMES.length
         potionHudAnchor = clamp(potionHudAnchor, 0, 8);
         armorHudAnchor = clamp(armorHudAnchor, 0, 8);
         if (potionHudScale < 0.3f || potionHudScale > 10.0f) potionHudScale = defaultTextSizeScale();
@@ -182,11 +182,6 @@ public class ClientSettings {
         statsBackendToken = statsBackendToken.trim();
         if (settingsKeyCode < 0) settingsKeyCode = Keyboard.KEY_RSHIFT;
         if (dummySpawnKeyCode < 0) dummySpawnKeyCode = Keyboard.KEY_NONE;
-
-        if (keybinds == null) keybinds = new ArrayList<Keybind>();
-        for (Keybind kb : keybinds) {
-            if (kb != null && kb.message == null) kb.message = "";
-        }
     }
 
     public float defaultTextSizeScale() {

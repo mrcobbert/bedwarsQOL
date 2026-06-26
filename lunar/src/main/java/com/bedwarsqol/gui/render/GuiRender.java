@@ -85,6 +85,85 @@ public final class GuiRender {
         endShapes();
     }
 
+    /** ARGB linear interpolation; {@code t} clamped to [0,1]. */
+    public static int lerpColor(int c0, int c1, float t) {
+        if (t < 0f) t = 0f; else if (t > 1f) t = 1f;
+        int a0 = c0 >>> 24 & 0xFF, r0 = c0 >> 16 & 0xFF, g0 = c0 >> 8 & 0xFF, b0 = c0 & 0xFF;
+        int a1 = c1 >>> 24 & 0xFF, r1 = c1 >> 16 & 0xFF, g1 = c1 >> 8 & 0xFF, b1 = c1 & 0xFF;
+        int a = Math.round(a0 + (a1 - a0) * t), rr = Math.round(r0 + (r1 - r0) * t);
+        int g = Math.round(g0 + (g1 - g0) * t), b = Math.round(b0 + (b1 - b0) * t);
+        return (a << 24) | (rr << 16) | (g << 8) | b;
+    }
+
+    /**
+     * Vertical-gradient rounded rectangle (top colour at y1 → bottom colour at y2). Mirrors
+     * {@link #roundedRect(float,float,float,float,float,int)} but lerps the fill colour down the box:
+     * the middle column and side columns are gradient strips, and each (small) corner fan / fringe uses
+     * the interpolated colour at its own y — the colour variation across a corner radius is negligible
+     * at the radii used here, so the fans stay single-colour for simplicity.
+     */
+    public static void gradientRoundedRect(float x1, float y1, float x2, float y2, float radius, int top, int bottom) {
+        if (x1 > x2) { float t = x1; x1 = x2; x2 = t; }
+        if (y1 > y2) { float t = y1; y1 = y2; y2 = t; int c = top; top = bottom; bottom = c; }
+        radius = Math.min(radius, Math.min(x2 - x1, y2 - y1) / 2f);
+        if (radius <= 0.5f) { gradientRect(x1, y1, x2, y2, top, bottom); return; }
+        float h = y2 - y1;
+        int cTop = lerpColor(top, bottom, radius / h);       // colour at y1 + radius
+        int cBot = lerpColor(top, bottom, (h - radius) / h); // colour at y2 - radius
+        gradientRect(x1 + radius, y1, x2 - radius, y2, top, bottom);         // middle column (full height)
+        gradientRect(x1, y1 + radius, x1 + radius, y2 - radius, cTop, cBot); // left column (between arcs)
+        gradientRect(x2 - radius, y1 + radius, x2, y2 - radius, cTop, cBot); // right column
+        cornerFan(x1 + radius, y1 + radius, radius, 180f, cTop); // top-left
+        cornerFan(x2 - radius, y1 + radius, radius, 270f, cTop); // top-right
+        cornerFan(x2 - radius, y2 - radius, radius, 0f, cBot);   // bottom-right
+        cornerFan(x1 + radius, y2 - radius, radius, 90f, cBot);  // bottom-left
+        fringeEdge(x1 + radius, y1, x2 - radius, y1, 0f, -1f, top);    // top
+        fringeEdge(x1 + radius, y2, x2 - radius, y2, 0f, 1f, bottom);  // bottom
+        fringeEdge(x1, y1 + radius, x1, y2 - radius, -1f, 0f, cTop);   // left
+        fringeEdge(x2, y1 + radius, x2, y2 - radius, 1f, 0f, cTop);    // right
+    }
+
+    /** Horizontal gradient fill from {@code left} (at x1) to {@code right} (at x2). */
+    public static void gradientRectH(float x1, float y1, float x2, float y2, int left, int right) {
+        if (x1 > x2) { float t = x1; x1 = x2; x2 = t; int c = left; left = right; right = c; }
+        if (y1 > y2) { float t = y1; y1 = y2; y2 = t; }
+        beginShapes();
+        GlStateManager.shadeModel(GL11.GL_SMOOTH);
+        Tessellator tess = Tessellator.getInstance();
+        WorldRenderer wr = tess.getWorldRenderer();
+        wr.begin(GL11.GL_QUADS, DefaultVertexFormats.POSITION_COLOR);
+        wr.pos(x1, y2, 0).color(r(left), g(left), b(left), a(left)).endVertex();
+        wr.pos(x2, y2, 0).color(r(right), g(right), b(right), a(right)).endVertex();
+        wr.pos(x2, y1, 0).color(r(right), g(right), b(right), a(right)).endVertex();
+        wr.pos(x1, y1, 0).color(r(left), g(left), b(left), a(left)).endVertex();
+        tess.draw();
+        GlStateManager.shadeModel(GL11.GL_FLAT);
+        endShapes();
+    }
+
+    /** Horizontal-gradient rounded rectangle (left colour at x1 → right colour at x2) — the transpose of
+     *  {@link #gradientRoundedRect}. Each (small) corner fan / fringe uses the colour at its own x. */
+    public static void gradientRoundedRectH(float x1, float y1, float x2, float y2, float radius, int left, int right) {
+        if (x1 > x2) { float t = x1; x1 = x2; x2 = t; int c = left; left = right; right = c; }
+        if (y1 > y2) { float t = y1; y1 = y2; y2 = t; }
+        radius = Math.min(radius, Math.min(x2 - x1, y2 - y1) / 2f);
+        if (radius <= 0.5f) { gradientRectH(x1, y1, x2, y2, left, right); return; }
+        float w = x2 - x1;
+        int cL = lerpColor(left, right, radius / w);       // colour at x1 + radius
+        int cR = lerpColor(left, right, (w - radius) / w); // colour at x2 - radius
+        gradientRectH(x1, y1 + radius, x2, y2 - radius, left, right);     // middle band (full width)
+        gradientRectH(x1 + radius, y1, x2 - radius, y1 + radius, cL, cR); // top strip (between arcs)
+        gradientRectH(x1 + radius, y2 - radius, x2 - radius, y2, cL, cR); // bottom strip
+        cornerFan(x1 + radius, y1 + radius, radius, 180f, cL); // top-left
+        cornerFan(x2 - radius, y1 + radius, radius, 270f, cR); // top-right
+        cornerFan(x2 - radius, y2 - radius, radius, 0f, cR);   // bottom-right
+        cornerFan(x1 + radius, y2 - radius, radius, 90f, cL);  // bottom-left
+        fringeEdge(x1, y1 + radius, x1, y2 - radius, -1f, 0f, left);  // left
+        fringeEdge(x2, y1 + radius, x2, y2 - radius, 1f, 0f, right);  // right
+        fringeEdge(x1 + radius, y1, x2 - radius, y1, 0f, -1f, cL);    // top
+        fringeEdge(x1 + radius, y2, x2 - radius, y2, 0f, 1f, cL);     // bottom
+    }
+
     /** Rectangle outline drawn as four thin filled rects. */
     public static void border(float x1, float y1, float x2, float y2, int color, float t) {
         rect(x1, y1, x2, y1 + t, color);           // top
@@ -461,15 +540,20 @@ public final class GuiRender {
      * to the real framebuffer pixels {@code glScissor} expects (origin bottom-left, scaled by the GUI
      * factor). Always pair with {@link #endScissor()}.
      */
+    /** Extra GL scale currently wrapping the GUI (e.g. SettingsGui's "Large"-density lock). glScissor clips
+     *  in window pixels, OUTSIDE the GlStateManager matrix, so the clip rect must fold this factor in too —
+     *  otherwise scrollable viewports clip at the wrong size when the host GUI Scale isn't Large. Default 1. */
+    public static float scissorScale = 1f;
+
     public static void beginScissor(float x1, float y1, float x2, float y2) {
         Minecraft mc = Minecraft.getMinecraft();
         ScaledResolution sr = new ScaledResolution(mc);
-        int sf = sr.getScaleFactor();
+        float eff = sr.getScaleFactor() * scissorScale;
         int fbH = mc.displayHeight;
-        int sx = Math.round(x1 * sf);
-        int sy = Math.round(fbH - y2 * sf);
-        int sw = Math.max(0, Math.round((x2 - x1) * sf));
-        int sh = Math.max(0, Math.round((y2 - y1) * sf));
+        int sx = Math.round(x1 * eff);
+        int sy = Math.round(fbH - y2 * eff);
+        int sw = Math.max(0, Math.round((x2 - x1) * eff));
+        int sh = Math.max(0, Math.round((y2 - y1) * eff));
         GL11.glEnable(GL11.GL_SCISSOR_TEST);
         GL11.glScissor(sx, sy, sw, sh);
     }

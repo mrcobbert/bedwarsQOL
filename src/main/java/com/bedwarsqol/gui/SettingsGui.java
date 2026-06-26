@@ -2,9 +2,9 @@ package com.bedwarsqol.gui;
 
 import com.bedwarsqol.BedwarsQol;
 import com.bedwarsqol.config.ClientSettings;
-import com.bedwarsqol.config.Keybind;
 import com.bedwarsqol.feature.dummy.TestDummyHandler;
 import com.bedwarsqol.gui.render.BedwarsQolFont;
+import com.bedwarsqol.gui.render.GuiBlur;
 import com.bedwarsqol.gui.render.GuiRender;
 import com.bedwarsqol.gui.render.Icons;
 import com.bedwarsqol.gui.render.Theme;
@@ -48,6 +48,8 @@ public class SettingsGui extends GuiScreen {
             K_INVENTORY_BG = 63, K_GENTIMERS_BG = 64, K_KEYSTROKES_BG = 65;
     // HUD text font: modern (Inter) vs vanilla Minecraft.
     private static final int K_HUDFONT = 66;
+    // Auto GG: say "gg" once each time a BedWars game ends.
+    private static final int K_AUTOGG = 67;
     private static final int K_SCOREBOARD_SIZE = 46, K_STYLEDTAB_SIZE = 47;
     private static final int K_SUPPRESSESC = 48;
     private static final int K_DUMMY = 49, K_DUMMY_KEY = 50, K_DUMMY_CLEAR = 51;
@@ -72,6 +74,10 @@ public class SettingsGui extends GuiScreen {
     private static final String[] DUMMY_CLEAR_LABEL = {"Clear"};
 
     private static final BedwarsQolFont.Weight MED = BedwarsQolFont.Weight.MEDIUM;
+
+    // Header band: the version (left) + the global Edit HUD action (right). The version tracks
+    // BedwarsQol.VERSION; the brand name was removed so only the version identifies the header.
+    private static final String EDIT_HUD_LABEL = "Edit HUD";
 
     private enum RowType { TOGGLE, STEPPER, ACTION, SLIDER, KEYBIND }
 
@@ -132,8 +138,6 @@ public class SettingsGui extends GuiScreen {
     }
 
     private static final Section[] SECTIONS = {
-            // Search has its own path (drawSearch): a search bar over a filtered list of every module.
-            new Section("Search"),
             new Section("HUD", true,
                     new RowDef(RowType.TOGGLE, "Potion", "Active effects and timers", K_POTION),
                     new RowDef(RowType.TOGGLE, "In Game Only", K_POTION_INGAME, null, K_POTION),
@@ -168,46 +172,61 @@ public class SettingsGui extends GuiScreen {
                     new RowDef(RowType.STEPPER, "Opacity", K_OVERLAYOPACITY, OVERLAY_OPACITIES, K_BLOCKOVERLAY),
                     new RowDef(RowType.TOGGLE, "Hide Tab Header/Footer", "Hide tab header and footer", K_TAB_HEADERFOOTER),
                     new RowDef(RowType.TOGGLE, "Tab Numeric Ping", "Show ping as a number", K_TAB_PING)),
-            new Section("Hypixel Stats", true,
+            new Section("Hypixel", true,
                     new RowDef(RowType.TOGGLE, "Hypixel Stats", "BedWars stats on screen", K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Nametag", K_NAMETAG, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Tab", K_TAB, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Chat Hover", K_CHATHOVER, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Level", K_LEVEL, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Rank", K_RANK, null, K_STATS),
-                    new RowDef(RowType.TOGGLE, "Party Report", K_SWEATREPORT, null, K_STATS)),
-            // Keybinds is rendered by a dedicated scrollable-list path (drawKeybinds), not the row
-            // engine — it has no fixed RowDefs.
-            new Section("Keybinds"),
+                    new RowDef(RowType.TOGGLE, "Party Report", K_SWEATREPORT, null, K_STATS),
+                    new RowDef(RowType.TOGGLE, "Auto GG", "Say gg when a game ends", K_AUTOGG)),
             new Section("Settings",
                     new RowDef(RowType.STEPPER, "GUI Size", K_GUISIZE, GUI_SIZES),
                     new RowDef(RowType.STEPPER, "HUD Size", K_HUDSIZE, TEXT_SIZES),
                     new RowDef(RowType.STEPPER, "Scoreboard Size", K_SCOREBOARD_SIZE, SIZES),
                     new RowDef(RowType.STEPPER, "Tab List Size", K_STYLEDTAB_SIZE, SIZES),
                     new RowDef(RowType.STEPPER, "Display", K_DISPLAY, DISPLAY_MODES),
-                    new RowDef(RowType.STEPPER, "Font", K_HUDFONT, FONT_MODES),
-                    new RowDef(RowType.ACTION, "Edit HUD", K_EDITHUD, null)),
+                    new RowDef(RowType.STEPPER, "Font", K_HUDFONT, FONT_MODES)),
             new Section("Debug", true,
                     new RowDef(RowType.TOGGLE, "Test Dummy", "Spawn practice players", K_DUMMY),
                     new RowDef(RowType.KEYBIND, "Spawn Key", K_DUMMY_KEY, null, K_DUMMY),
                     new RowDef(RowType.ACTION, "Remove Dummies", K_DUMMY_CLEAR, DUMMY_CLEAR_LABEL, K_DUMMY)),
     };
 
-    /** Indices of the special sections (own render/input paths) in {@link #SECTIONS}. */
-    private static final int SEARCH_SECTION = 0;
-    private static final int KEYBINDS_SECTION = 5;
+    /** Index of the Settings section (its own flat-row render path) in {@link #SECTIONS}. */
+    private static final int SETTINGS_SECTION = 4; // the only flat-row page; hosts the theme carousel
+    // The Settings page renders its rows + dropdowns 30% smaller than the base control sizes (the theme
+    // band keeps its size).
+    private static final float SETTINGS_SCALE = 0.7f;
+    // Magnifier icon cell (atlas index 0) drawn inside the header search bar.
+    private static final int SEARCH_ICON = 0;
+    // Sidebar icons live in a fixed atlas baked in the original section order (0 Search/magnifier,
+    // … 4 Stats, 5 Keybinds, 6 Settings, 7 Debug). The Search page is gone (the bar lives in the header)
+    // and the Keybinds page was removed, so each live section maps to its atlas cell, skipping the unused
+    // Search (0) and Keybinds (5) cells.
+    private static final int[] SECTION_ICON = {1, 2, 3, 4, 6, 7};
 
     private static final int MAX_ROWS = 6;
-    private static final int MSG_MAX_LEN = 256;
-    private static final String ADD_LABEL = "+ Add Keybind";
     // Sidebar pill insets: gap from the panel edge to the pill, and from the pill to its label.
     private static final int NAV_INSET = 6;
     private static final int NAV_TEXT_PAD = 10;
 
     // ---- grayscale palette (Radix-style neutral ramp; depth via luminance + hairlines) ----
     // Shared constants live in gui/render/Theme so HUD elements (scoreboard, tab list) match exactly.
-    private static final int PANEL = Theme.PANEL;
-    private static final int PANEL_BORDER = Theme.PANEL_BORDER; // whiteish keyline
+    // Semi-transparent main background: the same near-black grey as the rest of the GUI, just at a lower
+    // alpha so the (dimmed) game shows through. Module cards keep their own opaque CARD_OFF_BG fill
+    // (header + expanded sub-options), so cards and their expanded forms read as solid surfaces on top.
+    private static final int PANEL = 0xB01A1A1A;
+    // Header bar fill: the main GUI background colour, a touch darker, INDEPENDENT of the module theme
+    // (so the header reads identically on every preset). Slightly more opaque than PANEL so the band
+    // reads as a defined header strip rather than blending into the body.
+    private static final int HEADER_BG = 0xC8141414;
+    // Full-screen scrim drawn over the blurred world (when GuiBlur is active): a lighter dim than the
+    // vanilla veil so the blur shows through clearly while the panel stays readable. The non-blur
+    // fallback (no world / no framebuffer support) uses the vanilla darker drawDefaultBackground veil.
+    private static final int SCRIM = 0x73000000;
+    private static final int PANEL_BORDER = Theme.PANEL_BORDER; // whiteish keyline (dropdowns / active chips)
     private static final int DIVIDER = Theme.DIVIDER;
     private static final int SEPARATOR = Theme.SEPARATOR;
     private static final int NAV_SEL = 0xFF2C2C2C;
@@ -231,10 +250,53 @@ public class SettingsGui extends GuiScreen {
     private static final int NAV_HOVER_TEXT = 0xFFC8C8C8; // inactive nav item on hover (grey, brighter than mid)
     private static final int PANEL_R = Theme.PANEL_R;
     // ---- module cards (accordion) ----
-    private static final int CARD_OFF_BG = 0xFF1C1C1C;
+    // Translucent card fill: more opaque than the PANEL background (0x90 alpha) so cards still read as
+    // raised surfaces, but no longer fully solid. Backs module cards (header + expanded body) and the
+    // search bar; the dropdown popup keeps its own opaque DD_BG so menus stay readable.
+    private static final int CARD_OFF_BG = 0xC81C1C1C;
+    // Header search field fill: a lighter grey than the cards/header so the bar stands out on its own.
+    private static final int SEARCH_BAR_BG = 0xD0343434;
     private static final int CARD_OFF_BORDER = 0x14FFFFFF;
     private static final int CARD_ON_BORDER = 0x3DFFFFFF;
-    private static final int CARD_R = 5;
+    private static final int CARD_R = 2;
+
+    /** A module-card colour preset: card fill + border (off / enabled), picked from the Settings carousel. */
+    private static final class ThemeDef {
+        final String name;
+        final int bg, borderOff, borderOn;
+        ThemeDef(String name, int bg, int borderOff, int borderOn) {
+            this.name = name; this.bg = bg; this.borderOff = borderOff; this.borderOn = borderOn;
+        }
+    }
+
+    // ---- module-card colour themes (the carousel on the Settings page) ----
+    // Each preset recolours ONLY the module-card fill + border — never the panel, the search bar or the
+    // HUD. Index 0 reproduces today's grayscale EXACTLY (CARD_OFF_BG / CARD_OFF_BORDER / CARD_ON_BORDER),
+    // so existing configs are visually unchanged. Coloured presets bake a higher bg alpha (0xE6) so vivid
+    // hues stay clean over the dimmed world, and pair a same-hue border at a faint (off) / strong (on)
+    // alpha — the "stronger border when enabled" cue.
+    private static final ThemeDef[] THEMES = {
+            new ThemeDef("Graphite", 0xC81C1C1C, 0x14FFFFFF, 0x3DFFFFFF), // default == today's grey
+            new ThemeDef("Slate",    0xE61E2530, 0x40647A93, 0xB08FA3BC),
+            new ThemeDef("Steel",    0xE61E2429, 0x40708595, 0xB098AEBE),
+            new ThemeDef("Midnight", 0xE61A2233, 0x405E7BB0, 0xB07FA8E0),
+            new ThemeDef("Indigo",   0xE61E1A3A, 0x406E5EC4, 0xB0937FE6),
+            new ThemeDef("Violet",   0xE6261A33, 0x40925EC4, 0xB0B98FF0),
+            new ThemeDef("Magenta",  0xE6311A30, 0x40B05EA8, 0xB0E68FD0),
+            new ThemeDef("Rose",     0xE6301821, 0x40C46F86, 0xB0F08FB0),
+            new ThemeDef("Crimson",  0xE6331616, 0x40C45353, 0xB0F08080),
+            new ThemeDef("Sunset",   0xE6331E14, 0x40C47A4F, 0xB0F0A36F),
+            new ThemeDef("Amber",    0xE62F2616, 0x40C49A4F, 0xB0F0C070),
+            new ThemeDef("Gold",     0xE62E2A12, 0x40C4B04F, 0xB0F0DC70),
+            new ThemeDef("Lime",     0xE6202E14, 0x408AC44F, 0xB0AEE66F),
+            new ThemeDef("Emerald",  0xE6112B1F, 0x404FB37A, 0xB06FE0A0),
+            new ThemeDef("Forest",   0xE6132714, 0x4055A85A, 0xB07ACC7F),
+            new ThemeDef("Teal",     0xE6112B2A, 0x404FB3A8, 0xB06FE0CF),
+            new ThemeDef("Ocean",    0xE6112B30, 0x404FB3C4, 0xB06FE0F0),
+            new ThemeDef("Sky",      0xE6172A33, 0x405BA8C4, 0xB082CEE6),
+            new ThemeDef("Mocha",    0xE62A2018, 0x40A07A55, 0xB0C9A37F),
+            new ThemeDef("Sand",     0xE62B2A20, 0x40B0A578, 0xB0E0D2A8),
+    };
     // ---- dropdown (<select>) menu ----
     private static final int DD_BG = 0xFF1E1E1E;            // menu surface (fully opaque, slightly elevated)
     // White keyline matching the main GUI panel border. Drawn LAST in drawDropdownPopup, on top of the
@@ -287,22 +349,54 @@ public class SettingsGui extends GuiScreen {
         }
     }
 
-    private int selectedSection = 1; // open to HUD by default (index 0 is the Search page)
+    private int selectedSection = 0; // open to HUD by default; search (header bar) overlays any section
     private final List<Row> rows = new ArrayList<Row>();
     private final List<Card> cards = new ArrayList<Card>();
     // Which module cards are expanded (by module kind). Empty = all collapsed (the default each open).
     private final java.util.Set<Integer> expandedModules = new java.util.HashSet<Integer>();
 
+    // ---- module-card theme (resolved from settings().moduleTheme by resolveTheme) ----
+    // The card fill + the off/enabled border colours used by drawCards. Default (index 0) == today's grey.
+    private int themeCardBg = CARD_OFF_BG, themeCardBorderOff = CARD_OFF_BORDER, themeCardBorderOn = CARD_ON_BORDER;
+    // Theme carousel (Settings page): a rounded-rectangle swatch strip in a band above the stepper rows,
+    // with its OWN horizontal scroll independent of the vertical row scroll. flatRowsTop is where the rows
+    // begin (below the band). Geometry is computed in layoutThemeCarousel; swatch rects derive from it in
+    // themeSwatchRect. Each swatch is sized to the longest theme name so the name centres inside it.
+    private int carouselTop, carouselBottom, flatRowsTop;
+    private int themeSwatchW, themeSwatchH, themeSwatchGap, themeStripX0;
+    private int themeScroll, themeScrollMax;
+    private float themeNameScale;
+    // Left-aligned "Themes" heading above the swatch strip + the y where the swatch row begins.
+    private float themeHeaderScale;
+    private int themeHeaderH, themeSwatchTop;
+    // Last cursor position seen by drawScreen — used by handleMouseInput to route the wheel to the carousel
+    // only while the cursor is over its band (handleMouseInput isn't handed mouse coordinates).
+    private int lastMouseX, lastMouseY;
+    /** GL multiplier that locks the panel to the "Large" (guiScale 3) density on any host GUI Scale, so the
+     *  settings GUI renders at one fixed physical size regardless of the client's Minecraft GUI Scale. 1.0
+     *  when the host is already at Large. Set in {@link #initGui()}, applied in {@link #drawScreen}, and the
+     *  cursor is divided by it in every mouse handler so hit-testing stays aligned with the scaled render. */
+    private float uiScale = 1f;
+
     // geometry / rhythm (computed in initGui)
     private int panelX, panelY, panelW, panelH, pad, sidebarW;
     private int contentX, contentRight, contentTop, contentH, rowH;
+    // Full-width header band across the panel top (name + version + Edit HUD button); the sidebar nav
+    // and content pane start below it. headerTitleScale sizes the (SemiBold) brand name.
+    private int headerY1, headerY2, headerH;
+    private float headerTitleScale;
     private int navStartY, navItemH;
+    // Edit HUD button pinned to the bottom of the sidebar (its own footer band, below the nav items).
+    private int sidebarFooterY1, sidebarFooterY2;
     private float labelScale, valueScale, navScale;
     // Module-card typography: a slightly smaller header and a noticeably smaller subtext than the base
     // label scale, so cards read compact/sleek and the (shortened) descriptions fit on a single line.
     private float cardTitleScale, cardDescScale;
     // Dropdown typography: a notch smaller than the value scale so triggers and option rows read compact.
     private float ddFontScale;
+    // Settings-page row label scale. Its dropdown triggers/menus render their value at THIS scale too, so
+    // the button text matches the setting title to its left (computed in initGui).
+    private float settingsRowLabelScale;
     // Widest stepper option label on the current page — shared so every stepper's arrows align.
     private float pageStepperTextW;
     // Nav icon geometry (computed in initGui), drawn left of each sidebar label.
@@ -320,17 +414,12 @@ public class SettingsGui extends GuiScreen {
     private final StringBuilder editSliderBuf = new StringBuilder();
     private float editSliderMin, editSliderMax;
 
-    // ---- Keybinds section state ----
-    // Inline editing of a macro's message (custom Inter text field with a blinking caret) and key
-    // capture are mutually exclusive: editingKb / capturingKb hold the row index, or -1 when idle.
-    private int editingKb = -1;
-    private int capturingKb = -1;
     // Debug section: capturing the Test Dummy spawn key (the next keypress binds it; ESC cancels).
     private boolean capturingDummyKey;
-    private final StringBuilder editBuf = new StringBuilder();
-    private int caret;
     private int caretBlink;
-    // Shared vertical scroll for whichever section is showing (the row list or the keybinds list).
+    // The search field is focused only after a click inside it (caret shows); a click anywhere else blurs it.
+    private boolean searchFocused;
+    // Shared vertical scroll for whichever section is showing (the row list or a card grid).
     // Reset to 0 on section switch; maxScroll == 0 means the section fits and never scrolls.
     private int scroll;
     private int maxScroll;
@@ -343,18 +432,14 @@ public class SettingsGui extends GuiScreen {
     private long lastFrameNanos;
     private boolean draggingThumb;
     private float thumbGrabDy; // cursor's offset within the thumb when grabbed
-    // Keybinds geometry (computed in layoutKeybinds()).
-    private int kbListTop, kbListBottom, kbRowH, kbVm, kbKeyX2, kbMsgX1, kbMsgX2, kbDelX1, kbDelX2;
-    private int kbAddX1, kbAddY1, kbAddX2, kbAddY2;
-    // Shared bottom "action bar" button band (Reset HUD Sizes / + Add Keybind) — same height & y on
-    // both pages, pinned to the bottom of the content area.
+    // Shared bottom "action bar" button band — pinned to the bottom of the content area, used when a
+    // flat section pulls an ACTION row out to the bottom (sized & positioned in initGui/layoutContent).
     private int bottomBtnY1, bottomBtnY2;
     private RowDef pinnedAction; // ACTION row pulled out of a flat section to the bottom band (or null)
     // Bottom of the flat-row scrollable viewport: the full content band, minus the pinned-button band
     // when an ACTION is pinned. The scrollbar must use this (not contentTop+contentH) so it stops above
     // the pinned button instead of overrunning it. Set in layoutContent, read by drawRows/scrollbarGeom.
     private int rowsViewBottom;
-    private float kbChipScale;
 
     // ---- Dropdown (<select>) popup state ----
     // A stepper's options are chosen from a click-to-open dropdown instead of < > arrows. Only one is
@@ -382,35 +467,92 @@ public class SettingsGui extends GuiScreen {
         // Key repeat so backspace/arrows repeat while editing a macro message; reset on close.
         Keyboard.enableRepeatEvents(true);
         float gf = guiFactor(settings().guiSize);
+        // Lock the panel to the "Large" (guiScale 3) physical size on ANY host GUI Scale, so the settings
+        // GUI looks identical everywhere — the mod's own Small/Normal/Large is the only size control. We lay
+        // the panel out against vW/vH (the scaled resolution that Large WOULD give on this display) and apply
+        // uiScale as a GL multiplier in drawScreen, remapping the cursor to match. At guiScale 3 uiScale == 1
+        // and vW/vH == width/height, so the Forge look is byte-for-byte unchanged.
+        int actualSf = Math.max(1, new net.minecraft.client.gui.ScaledResolution(mc).getScaleFactor());
+        uiScale = largeScaleFactor() / (float) actualSf;
+        int vW = Math.round(width / uiScale);
+        int vH = Math.round(height / uiScale);
         // The responsive "Large" size, then scaled down for Medium / Small. Everything below derives
         // from panelW/panelH, so the whole panel scales proportionally; the min-clamps are low enough
         // that the tallest (6-row) section still fits at Small.
-        int largeW = clamp(Math.round(width * 0.62f), 330, 480);
-        int largeH = clamp(Math.round(height * 0.60f), 188, 320);
+        int largeW = clamp(Math.round(vW * 0.62f), 330, 480);
+        // 15% shorter than before (height factor and both clamps scaled by 0.85), so the panel is no
+        // taller than it needs to be at every GUI size.
+        int largeH = clamp(Math.round(vH * 0.51f), 160, 272);
         panelW = Math.round(largeW * gf);
-        panelH = Math.round(largeH * gf);
-        panelX = (width - panelW) / 2;
-        panelY = (height - panelH) / 2;
+        // Small GUI mode gets a little extra height (width unchanged) so the sidebar items aren't cramped.
+        float smallHeightBoost = settings().guiSize == 0 ? 1.12f : 1.0f;
+        panelH = Math.round(largeH * gf * smallHeightBoost);
+        panelX = (vW - panelW) / 2;
+        panelY = (vH - panelH) / 2;
         pad = clamp(Math.round(panelW * 0.040f), 10, 18);
 
         contentRight = panelX + panelW - pad;
-        contentTop = panelY + pad;
-        contentH = panelH - 2 * pad;
-        rowH = clamp(contentH / MAX_ROWS, 16, 40);
-        childRowH = clamp(Math.round(rowH * 0.66f), 12, 26); // compact sub-setting rows
-        childIndent = clamp(Math.round(rowH * 0.7f), 12, 28);
+        int innerTop = panelY + pad;
+        int innerBottom = panelY + panelH - pad;
+        // Row rhythm is derived from the FULL inner height, so rows are sized identically with or
+        // without the header; the header band is then carved off the top of the body below.
+        rowH = clamp((innerBottom - innerTop) / MAX_ROWS, 16, 40);
+
+        // Typography is derived from rowH up front so the header bar can be sized to hug its own text.
         labelScale = clampf(rowH * 0.046f, 1.0f, 1.85f);
         valueScale = labelScale * 0.96f;
+        // Brand name a notch larger than the base label, drawn in SemiBold.
+        headerTitleScale = clampf(labelScale * 0.7125f, 0.75f, 1.125f); // 25% smaller header text
+
+        // Full-width themed header bar, flush with the panel's top edge (brand + version left, Edit HUD
+        // button right, divider beneath). headerH hugs its content — the brand title (or the slightly
+        // smaller Edit HUD label) — with a slim symmetric pad, so there's no dead space above or below it.
+        float headerContentH = Math.max(BedwarsQolFont.height(headerTitleScale),
+                BedwarsQolFont.height(valueScale * 0.595f));
+        headerH = Math.round(headerContentH) + 2 * clamp(Math.round(rowH * 0.22f), 4, 7);
+        headerH = Math.round(headerH * 1.265f); // taller so the search bar fits comfortably (15% + 10%)
+        headerY1 = panelY;
+        headerY2 = headerY1 + headerH;
+        // Persistent header search bar (right side of the header band): fill always, thin border only
+        // while focused. The version sits at the left; this is right-aligned to the content edge.
+        int sbPadY = clamp(Math.round(headerH * 0.16f), 2, 5);
+        int sbH = Math.round((headerH - 2 * sbPadY) * 0.8f); // 20% shorter than the padded band
+        // Optically centre the bar: the bright divider closing the band's bottom makes a geometrically
+        // centred bar read a touch high, so bias it down by a hair (a previous larger bias read too low).
+        // Clamped to always keep a pixel of clearance above the divider.
+        int sbDrop = Math.min(Math.round(headerH * 0.035f), (headerH - sbH) / 2 - 1);
+        searchBarY1 = headerY1 + (headerH - sbH) / 2 + Math.max(0, sbDrop);
+        searchBarY2 = searchBarY1 + sbH;
+        int sbW = clamp(Math.round(panelW * 0.224f), 63, Math.round(panelW * 0.5f)); // 30% narrower
+        searchBarX2 = panelX + panelW - pad;
+        searchBarX1 = searchBarX2 - sbW;
+        int searchClearW = clamp(Math.round((searchBarY2 - searchBarY1) * 0.7f), 10, 18);
+        searchClearX2 = searchBarX2 - 5;
+        searchClearX1 = searchClearX2 - searchClearW;
+        // Gap below the header divider == the bottom pad above the panel border (innerBottom is pad above
+        // the bottom edge), so the body is inset symmetrically top and bottom.
+        int bodyTop = headerY2 + pad;
+
+        contentTop = bodyTop;
+        contentH = innerBottom - bodyTop;
+        childRowH = clamp(Math.round(rowH * 0.66f), 12, 26); // compact sub-setting rows
+        childIndent = clamp(Math.round(rowH * 0.7f), 12, 28);
         ddFontScale = valueScale * 0.74f; // dropdowns smaller than other value text
-        cardTitleScale = labelScale * 0.9f;
-        cardDescScale = labelScale * 0.66f;
-        // Sidebar vertical layout first: every SECTIONS item must fit inside the panel at every GUI size.
-        int navTop = panelY + pad;
-        int navBottom = panelY + panelH - pad;
+        settingsRowLabelScale = labelScale * 0.72f * SETTINGS_SCALE * 1.375f; // Settings row label (& its dropdown text)
+        cardTitleScale = labelScale * 0.7425f; // 25% smaller, then +10% (0.675 * 1.10)
+        cardDescScale = labelScale * 0.5445f;  // tracks the title (+10%, 0.495 * 1.10) to keep hierarchy
+        // Sidebar vertical layout: every SECTIONS item must fit inside the panel at every GUI size.
+        // The nav now starts below the header band, so its available height is reduced accordingly.
+        int navTop = bodyTop;
+        // Reserve a footer band at the bottom of the sidebar for the (small) Edit HUD button.
+        int sidebarFooterH = clamp(Math.round(rowH * 0.5f), 11, 18);
+        sidebarFooterY2 = innerBottom;
+        sidebarFooterY1 = sidebarFooterY2 - sidebarFooterH;
+        int navBottom = sidebarFooterY1 - clamp(Math.round(rowH * 0.3f), 4, 10);
         int navAvail = navBottom - navTop;
-        // Floor low enough that all items fit at Small; cap the block to the available height so the last
-        // item (Debug) can never spill past navBottom or the panel border.
-        navItemH = clamp(navAvail / SECTIONS.length, 12, 30);
+        // Floor low enough that all items fit at Small even with the header eating the top of the panel;
+        // cap the block to the available height so the last item (Debug) can never spill past navBottom.
+        navItemH = clamp(navAvail / SECTIONS.length, 10, 30);
         int navBlockH = Math.min(navItemH * SECTIONS.length, navAvail);
         navStartY = navTop + Math.max(0, (navAvail - navBlockH) / 2);
 
@@ -434,7 +576,9 @@ public class SettingsGui extends GuiScreen {
         bottomBtnY1 = bottomBtnY2 - bottomBtnH;
 
         if (allModules.isEmpty()) collectModules();
+        resolveTheme();
         layoutContent();
+        GuiBlur.begin(); // start the world-blur fade-in behind the panel (same raw-GL path on both builds)
     }
 
     private static float guiFactor(int guiSize) {
@@ -445,16 +589,23 @@ public class SettingsGui extends GuiScreen {
         }
     }
 
+    /** The scaleFactor vanilla Minecraft would pick at GUI Scale = Large (guiScale 3) on this display. The
+     *  panel locks to this density (see {@link #uiScale}) so it renders at the same physical size at any host
+     *  GUI Scale. Mirrors 1.8.9 ScaledResolution's loop, capped at 3; on a display too small to reach 3 it
+     *  returns whatever Large would actually give, so the panel never overflows the screen. */
+    private int largeScaleFactor() {
+        int gw = mc.displayWidth, gh = mc.displayHeight;
+        int sf = 1;
+        while (sf < 3 && gw / (sf + 1) >= 320 && gh / (sf + 1) >= 240) sf++;
+        return sf;
+    }
+
     private void layoutContent() {
         rows.clear();
         cards.clear();
         pinnedAction = null;
-        if (selectedSection == SEARCH_SECTION) {
-            layoutSearch();
-            return;
-        }
-        if (selectedSection == KEYBINDS_SECTION) {
-            layoutKeybinds();
+        if (searchActive()) {
+            layoutSearchResults();
             return;
         }
         if (SECTIONS[selectedSection].cards) {
@@ -462,8 +613,13 @@ public class SettingsGui extends GuiScreen {
             return;
         }
         Section section = SECTIONS[selectedSection];
+        // The Settings page carries a theme carousel in a band at the top; its rows begin below it.
+        // Other (hypothetical) flat sections start at contentTop as before.
+        flatRowsTop = contentTop;
+        if (selectedSection == SETTINGS_SECTION) layoutThemeCarousel();
+        int rowsTop = flatRowsTop;
         // Compact the flat "Settings" rows: a shorter top-level row height than the global rowH.
-        int flatRowH = clamp(Math.round(rowH * 0.80f), 13, 30);
+        int flatRowH = clamp(Math.round(rowH * 0.45f), 13, 18); // packed tighter — much smaller vertical gap
         // Pull any ACTION row out to the shared pinned bottom band; lay out the rest (steppers).
         // Widest stepper option label is shared so every stepper's arrows align.
         pageStepperTextW = 0f;
@@ -471,9 +627,9 @@ public class SettingsGui extends GuiScreen {
         for (RowDef rd : section.rows) {
             if (rd.type == RowType.ACTION) { pinnedAction = rd; continue; }
             if (rd.type == RowType.STEPPER && rd.options != null) {
-                // Triggers render their value at ddFontScale, so measure the option widths there too.
+                // Triggers render their value at settingsRowLabelScale here, so measure there too.
                 for (String opt : rd.options) {
-                    pageStepperTextW = Math.max(pageStepperTextW, GuiRender.textWidth(opt, ddFontScale));
+                    pageStepperTextW = Math.max(pageStepperTextW, GuiRender.textWidth(opt, settingsRowLabelScale));
                 }
             }
             blockH += rd.child ? childRowH : flatRowH;
@@ -483,12 +639,12 @@ public class SettingsGui extends GuiScreen {
         int listBottom = pinnedAction != null
                 ? bottomBtnY1 - clamp(Math.round(rowH * 0.35f), 4, 10) : contentTop + contentH;
         rowsViewBottom = listBottom;
-        int availH = listBottom - contentTop;
+        int availH = listBottom - rowsTop;
         boolean scrollable = blockH > availH;
         maxScroll = scrollable ? blockH - availH : 0;
         scroll = clamp(scroll, 0, maxScroll);
         int contentW = contentRight - contentX - SCROLL_GUTTER;
-        int y = contentTop - scroll; // top-aligned
+        int y = rowsTop - scroll; // top-aligned, below the carousel band on the Settings page
         for (RowDef rd : section.rows) {
             if (rd.type == RowType.ACTION) continue; // drawn as a pinned bottom button
             Row row = new Row(rd);
@@ -522,7 +678,7 @@ public class SettingsGui extends GuiScreen {
     /** Re-runs whichever layout owns the current {@link #cards} (the search view or a section view),
      *  so card clicks that expand/collapse re-flow correctly on either page. */
     private void relayoutCards() {
-        if (selectedSection == SEARCH_SECTION) layoutSearch();
+        if (searchActive()) layoutSearchResults();
         else layoutCards();
     }
 
@@ -606,77 +762,120 @@ public class SettingsGui extends GuiScreen {
         }
     }
 
-    /**
-     * Lays out the Keybinds view: a scrollable list of macro rows in a clipped viewport, with a
-     * pinned "+ Add Keybind" button below it. All columns derive from the content area, so it stays
-     * balanced at every GUI size; the viewport height drives {@link #maxScroll} and whether the
-     * scrollbar shows.
-     */
-    private void layoutKeybinds() {
-        int contentW = contentRight - contentX;
-        kbRowH = clamp(Math.round(rowH * 1.05f), 18, 34);
-        kbVm = clamp(Math.round(kbRowH * 0.26f), 3, 8);
-        kbChipScale = clampf(labelScale * 0.68f, 0.8f, 1.15f);
-
-        // Pinned add button at the shared bottom action band (same height/position as Reset HUD Sizes).
-        kbAddY2 = bottomBtnY2;
-        kbAddY1 = bottomBtnY1;
-        float[] add = bottomButton(ADD_LABEL);
-        kbAddX1 = Math.round(add[0]);
-        kbAddX2 = Math.round(add[2]);
-
-        // List viewport above the add button.
-        kbListTop = contentTop;
-        kbListBottom = kbAddY1 - clamp(Math.round(kbRowH * 0.35f), 4, 10);
-
-        int n = settings().keybinds.size();
-        int viewH = Math.max(0, kbListBottom - kbListTop);
-        maxScroll = Math.max(0, n * kbRowH - viewH);
-        scroll = clamp(scroll, 0, maxScroll);
-
-        // Columns: [ key chip ] [ message ........ ] [ ✕ ], plus a scrollbar gutter when needed.
-        int gutter = maxScroll > 0 ? 7 : 0;
-        int listRight = contentRight - gutter;
-        int gap = clamp(Math.round(contentW * 0.025f), 4, 10);
-        int delW = clamp(kbRowH - 2 * kbVm, 12, 20);
-        kbDelX2 = listRight - 2;
-        kbDelX1 = kbDelX2 - delW;
-        int keyW = clamp(Math.round(contentW * 0.23f), 42, 86);
-        kbKeyX2 = contentX + keyW;
-        kbMsgX1 = kbKeyX2 + gap;
-        kbMsgX2 = kbDelX1 - gap;
-    }
-
-    private int kbRowTop(int i) {
-        return kbListTop - scroll + i * kbRowH;
-    }
-
     // ---------------------------------------------------------------- rendering
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
+        GuiBlur.update(); // render the world blur onto the framebuffer before anything draws on top
         advanceScroll();
-        drawDefaultBackground();
+        // Remap the host cursor into the fixed-"Large" virtual space the panel is laid out in (identity at
+        // guiScale 3). Everything below — hover, the off-screen-cursor trick, the dropdown popup — then runs
+        // in that space, matching the geometry built in initGui().
+        mouseX = Math.round(mouseX / uiScale);
+        mouseY = Math.round(mouseY / uiScale);
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
+        // Scrim over the (now blurred) world: a lighter dim while the blur is active so the blur reads
+        // clearly; fall back to the vanilla darker veil when there's no blur (no world / no framebuffer).
+        // Drawn in real screen coords (full screen) BEFORE the panel's "Large"-density transform below.
+        if (GuiBlur.isActive()) GuiRender.rect(0, 0, width, height, SCRIM);
+        else drawDefaultBackground();
+
+        // Lock the panel render to the "Large" density; popped after the dropdown popup (the last panel layer).
+        GlStateManager.pushMatrix();
+        GlStateManager.scale(uiScale, uiScale, 1f);
+        GuiRender.scissorScale = uiScale; // glScissor runs outside this matrix — fold the factor into the clip
 
         int px2 = panelX + panelW, py2 = panelY + panelH;
-        GuiRender.roundedRect(panelX, panelY, px2, py2, PANEL_R, PANEL);
-        GuiRender.roundedRectOutline(panelX, panelY, px2, py2, PANEL_R, 0.75f, PANEL_BORDER);
-
-        // sidebar / content divider
-        GuiRender.rect(panelX + sidebarW, panelY + pad, panelX + sidebarW + 1, py2 - pad, DIVIDER);
+        // The keyline outline (drawn last, below) is the panel's OUTERMOST edge. The translucent fills are
+        // inset by 0.25px (half the AA fringe) so their outer feather ends exactly where the stroke's outer
+        // feather ends — the fill never pokes past the border, so nothing (fill or background) bleeds beyond
+        // the keyline — while the fill still reaches under the stroke's solid core ([edge+0.25, edge+0.5])
+        // so the background can't show through the border either. Radius shrinks 0.25 to stay concentric.
+        GuiRender.roundedRect(panelX + 0.25f, panelY + 0.25f, px2 - 0.25f, py2 - 0.25f, PANEL_R - 0.25f, PANEL);
+        // Header bar fill: HEADER_BG over the top portion, inset the same 0.25 on its three outer sides;
+        // its bottom stays flush at headerY2 over the body fill. Drawn before the keyline.
+        GuiRender.roundedRect(panelX + 0.25f, panelY + 0.25f, px2 - 0.25f, headerY2, PANEL_R - 0.25f, PANEL_R - 0.25f, 0f, 0f, HEADER_BG);
+        GuiRender.roundedRectOutline(panelX, panelY, px2, py2, PANEL_R, 0.75f, CARD_ON_BORDER); // the panel keyline — the outermost edge; fills sit just inside it
 
         // While a dropdown is open it's modal: feed the rest of the GUI an off-screen cursor so nothing
         // behind the menu hover-highlights (other triggers, rows) or scales (sidebar items).
         int hx = openDropdownKind != 0 ? -1 : mouseX;
         int hy = openDropdownKind != 0 ? -1 : mouseY;
+
+        // Header band (name + version + Edit HUD); its hairline frames the top, the sidebar/content
+        // divider drops from that hairline down to the panel's bottom inset.
+        drawHeader(hx, hy);
+        GuiRender.rect(panelX + sidebarW, headerY2, panelX + sidebarW + 1, py2 - pad, DIVIDER);
+
         drawSidebar(hx, hy);
-        if (selectedSection == SEARCH_SECTION) drawSearch(hx, hy);
-        else if (selectedSection == KEYBINDS_SECTION) drawKeybinds(hx, hy);
+        if (searchActive()) drawSearchResults(hx, hy);
         else if (SECTIONS[selectedSection].cards) drawCards(hx, hy);
         else drawRows(hx, hy);
 
         // The open dropdown menu floats above all section content (and the scrollbar).
         drawDropdownPopup(mouseX, mouseY);
+
+        GuiRender.scissorScale = 1f;
+        GlStateManager.popMatrix();
+    }
+
+    /** Full-width header band: brand name + version (left), the global Edit HUD button (right), and a
+     *  thin divider beneath. Drawn on every section. The band's background is the themed bar filled in
+     *  {@link #drawScreen} (before the panel keyline); here we draw its contents and the divider. */
+    private void drawHeader(int mouseX, int mouseY) {
+        // Header identity is just the version (left); the persistent search bar sits at the right.
+        float titleY = vcenterOptical(headerY1, headerH, headerTitleScale, BedwarsQolFont.Weight.REGULAR) + headerContentDrop();
+        GuiRender.text("v" + BedwarsQol.VERSION, panelX + pad, titleY, headerTitleScale, TEXT_MID, BedwarsQolFont.Weight.REGULAR);
+
+        drawSearchBar(mouseX, mouseY);
+
+        // Divider beneath the header: a horizontal rule meeting both side borders flush. rect rasterizes
+        // with a half-open [x1,x2) fill rule — the LEFT edge is pixel-inclusive, the RIGHT edge exclusive —
+        // so a symmetric ±0.5 inset leaves the right end clean but the left end paints the border's boundary
+        // pixel (the slight overlap). The right end stays at the border's inner solid edge (px2 - 0.5); the
+        // left end is pushed in one extra device pixel (1/scaleFactor GUI px) so it clears that boundary
+        // pixel at every GUI scale, leaving both ends flush with no overlap and no gap.
+        int scaleFactor = new net.minecraft.client.gui.ScaledResolution(mc).getScaleFactor();
+        GuiRender.rect(panelX + 0.5f + 1f / scaleFactor, headerY2, (panelX + panelW) - 0.5f, headerY2 + 0.75f, CARD_ON_BORDER);
+    }
+
+    /** Persistent header search bar: a translucent rounded field (magnifier + text + clear-x). The border
+     *  appears only while the field is focused (clicked into); there is no blinking caret. Typing into it
+     *  switches the content area to the search results (see {@link #searchActive}). */
+    private void drawSearchBar(int mouseX, int mouseY) {
+        String q = searchQuery.toString();
+        GuiRender.roundedRect(searchBarX1, searchBarY1, searchBarX2, searchBarY2, CARD_R, SEARCH_BAR_BG);
+        if (searchFocused) {
+            GuiRender.roundedRectOutline(searchBarX1, searchBarY1, searchBarX2, searchBarY2, CARD_R, 0.5f, PANEL_BORDER);
+        }
+        float barCy = (searchBarY1 + searchBarY2) / 2f;
+        float iconSize = (searchBarY2 - searchBarY1) * 0.5f;
+        Icons.draw(SEARCH_ICON, searchBarX1 + 7 + iconSize / 2f, barCy, iconSize, TEXT_MID);
+        float textX = searchBarX1 + 7 + iconSize + 6;
+        float textRight = searchClearX1 - 6;
+        // Text is sized to the (slim) bar so it stays comfortably inset rather than filling it.
+        float sScale = Math.min(valueScale, (searchBarY2 - searchBarY1) * 0.62f / BedwarsQolFont.height(1f));
+        float ty = vcenter(searchBarY1, searchBarY2 - searchBarY1, sScale);
+        if (q.isEmpty()) {
+            GuiRender.text("Search...", textX, ty, sScale, TEXT_LO);
+        } else {
+            GuiRender.text(ellipsize(q, sScale, textRight - textX), textX, ty, sScale, TEXT_HI);
+        }
+        if (!q.isEmpty()) {
+            boolean xHover = GuiRender.inside(mouseX, mouseY, searchClearX1, searchBarY1, searchClearX2, searchBarY2);
+            drawCross((searchClearX1 + searchClearX2) / 2f, barCy, (searchBarY2 - searchBarY1) * 0.16f,
+                    xHover ? TEXT_HI : TEXT_MID);
+        }
+    }
+
+    /** Small downward optical correction for header content (version label + Edit HUD label/hit rect).
+     *  vcenterOptical places equal pixel gaps above and below the caps, but the band is closed at the
+     *  bottom by a bright divider rule while its top is open (the panel's rounded corners blend into the
+     *  scrim) — the heavier bottom edge makes perfectly cap-centred content read slightly high. Biasing
+     *  it down by a few percent of the band height restores the perceived centre. */
+    private float headerContentDrop() {
+        return headerH * 0.07f;
     }
 
     private void drawSidebar(int mouseX, int mouseY) {
@@ -696,12 +895,36 @@ public class SettingsGui extends GuiScreen {
             float ty = vcenter(y, navItemH, scale);
             GuiRender.text(SECTIONS[i].tab, tx, ty, scale, navColor, selected ? MED : BedwarsQolFont.Weight.REGULAR);
         }
+        drawSidebarFooter(mouseX, mouseY);
+    }
+
+    /** Edit HUD action pinned to the bottom of the sidebar as a footer button (own band, below the nav). */
+    private void drawSidebarFooter(int mouseX, int mouseY) {
+        float[] b = sidebarEditBtnRect();
+        boolean hover = GuiRender.inside(mouseX, mouseY, b[0], b[1], b[2], b[3]);
+        GuiRender.roundedRect(b[0], b[1], b[2], b[3], CARD_R, hover ? BTN_HOVER : BTN_BG);
+        GuiRender.roundedRectOutline(b[0], b[1], b[2], b[3], CARD_R, 0.75f, BTN_BORDER);
+        float s = navScale * 0.72f;
+        GuiRender.textCentered(EDIT_HUD_LABEL, (b[0] + b[2]) / 2f, vcenter(b[1], b[3] - b[1], s), s,
+                hover ? TEXT_HI : TEXT_MID, MED);
+    }
+
+    /** Screen rect [x1,y1,x2,y2] of the sidebar's small Edit HUD footer button: sized to its label and
+     *  centered in the footer band. */
+    private float[] sidebarEditBtnRect() {
+        float s = navScale * 0.72f;
+        float w = GuiRender.textWidth(EDIT_HUD_LABEL, s, MED) + 12f;
+        float h = Math.min(sidebarFooterY2 - sidebarFooterY1, BedwarsQolFont.height(s) + 6f);
+        float cx = panelX + sidebarW / 2f;
+        float cy = (sidebarFooterY1 + sidebarFooterY2) / 2f;
+        return new float[]{cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f};
     }
 
     /** Section icon from the Tabler (MIT) alpha atlas, tinted by {@code color}. See {@link Icons}.
      *  The slight upscale compensates for the icon set's built-in grid padding so it matches the label. */
     private void drawNavIcon(int section, float cx, float cy, float size, int color) {
-        Icons.draw(section, cx, cy, size * 1.1f, color);
+        int cell = (section >= 0 && section < SECTION_ICON.length) ? SECTION_ICON[section] : section;
+        Icons.draw(cell, cx, cy, size * 1.1f, color);
     }
 
     private void drawCards(int mouseX, int mouseY) {
@@ -719,9 +942,10 @@ public class SettingsGui extends GuiScreen {
         for (Card card : cards) {
             if (clip && (card.y + card.h + scrollDy < viewTop || card.y + scrollDy > viewBottom)) continue;
             boolean on = toggleValue(cfg, card.module.kind);
-            GuiRender.roundedRect(card.x, card.y, card.x + card.w, card.y + card.h, CARD_R, CARD_OFF_BG);
-            GuiRender.roundedRectOutline(card.x, card.y, card.x + card.w, card.y + card.h, CARD_R, 0.75f,
-                    on ? CARD_ON_BORDER : CARD_OFF_BORDER);
+            GuiRender.gradientRoundedRectH(card.x, card.y, card.x + card.w, card.y + card.h, CARD_R,
+                    gradHi(themeCardBg), gradLo(themeCardBg)); // left→right sheen on the card fill
+            GuiRender.roundedRectOutline(card.x, card.y, card.x + card.w, card.y + card.h, CARD_R, 0.5f,
+                    on ? themeCardBorderOn : themeCardBorderOff);
 
             // title + description block, vertically centered in the header band
             float chevSpace = card.hasSub ? (chevW + padX) : 0f;
@@ -736,7 +960,7 @@ public class SettingsGui extends GuiScreen {
             }
             // expand indicator for modules with sub-options ("+" collapsed / "-" expanded)
             if (card.hasSub) {
-                drawExpandIcon(card.x + card.w - padX - chevW / 2f, card.y + card.headerH / 2f, chevW,
+                drawExpandIcon(card.x + card.w - padX - chevW / 2f, card.y + card.headerH / 2f, chevW * 0.5f,
                         card.expanded, on ? TEXT_MID : TEXT_LO);
             }
             // sub-options (present only when expanded)
@@ -761,8 +985,9 @@ public class SettingsGui extends GuiScreen {
 
     /** Renders one sub-option control (toggle / stepper / slider) inside an expanded card. */
     private void drawControl(Row row, int mouseX, int mouseY, ClientSettings cfg) {
-        float lScale = labelScale * 0.72f;
-        float vScale = valueScale * 0.72f;
+        // Expanded sub-option text: was 0.54 (0.72 * 0.75), then +10% -> 0.594.
+        float lScale = labelScale * 0.594f;
+        float vScale = valueScale * 0.594f;
         float labelY = vcenter(row.y, row.h, lScale);
         if (row.hit(mouseX, mouseY)) {
             GuiRender.roundedRect(row.x, row.y + 1, row.x + row.w, row.y + row.h - 1, 4, ROW_HOVER);
@@ -832,7 +1057,9 @@ public class SettingsGui extends GuiScreen {
 
     private void drawRows(int mouseX, int mouseY) {
         ClientSettings cfg = settings();
-        int viewTop = contentTop, viewBottom = rowsViewBottom;
+        // The Settings page draws its theme carousel as a fixed band above the (scrolling) rows.
+        if (selectedSection == SETTINGS_SECTION) drawThemeCarousel(mouseX, mouseY);
+        int viewTop = selectedSection == SETTINGS_SECTION ? flatRowsTop : contentTop, viewBottom = rowsViewBottom;
         boolean clip = maxScroll > 0;
         float scrollDy = scroll - scrollRender; // shift baked (target) positions to the eased offset
         if (clip) GuiRender.beginScissor(contentX, viewTop, contentRight, viewBottom);
@@ -844,10 +1071,11 @@ public class SettingsGui extends GuiScreen {
             boolean child = row.def.child;
             // A sub-setting is greyed + non-interactive while its parent toggle is off.
             boolean enabled = !child || toggleValue(cfg, row.def.parentKind);
-            // Match the module-card typography: card titles render at labelScale*0.9, so the (flat)
-            // Settings rows use that same compact size for a consistent feel across the whole GUI.
-            float lScale = labelScale * 0.72f;
-            float vScale = valueScale * 0.72f;
+            // Match the module-card typography, 30% smaller for the Settings page; the label text is then
+            // bumped 25% larger and a further 10% (1.25 * 1.10 = 1.375). The stepper dropdown text matches
+            // this label scale (so the button text == the setting title to its left); sliders keep vScale.
+            float lScale = settingsRowLabelScale;
+            float vScale = valueScale * 0.72f * SETTINGS_SCALE;
             int labelColor = enabled ? TEXT_HI : TEXT_LO;
             boolean inView = !clip || (mouseY >= viewTop && mouseY <= viewBottom);
             boolean hover = inView && enabled && row.hit(mouseX, mouseY);
@@ -868,7 +1096,7 @@ public class SettingsGui extends GuiScreen {
                     break;
                 case STEPPER: {
                     GuiRender.text(row.def.label, row.x + 2, labelY, lScale, labelColor, MED);
-                    drawDropdownTrigger(row, row.def.options[stepperIndex(cfg, row.def.kind)], ddFontScale, enabled, mouseX, mouseY);
+                    drawDropdownTrigger(row, row.def.options[stepperIndex(cfg, row.def.kind)], settingsRowLabelScale, enabled, mouseX, mouseY);
                     break;
                 }
                 case SLIDER: {
@@ -905,19 +1133,136 @@ public class SettingsGui extends GuiScreen {
         }
     }
 
+    // ---------------------------------------------------------------- theme carousel (Settings page)
+
+    /** Copies the active preset (clamped against THEMES) into the card-colour fields read by drawCards. */
+    private void resolveTheme() {
+        int i = settings().moduleTheme;
+        ThemeDef t = THEMES[(i >= 0 && i < THEMES.length) ? i : 0];
+        themeCardBg = t.bg;
+        themeCardBorderOff = t.borderOff;
+        themeCardBorderOn = t.borderOn;
+    }
+
+    /** Lays out the theme carousel band at the top of the Settings content area and sets {@link #flatRowsTop}
+     *  (where the stepper rows begin, just below it). Square swatches are sized from rowH; if the strip is
+     *  wider than the content column it scrolls horizontally (its own {@link #themeScroll}), otherwise it's
+     *  centred and {@link #themeScrollMax} is 0. */
+    private void layoutThemeCarousel() {
+        themeNameScale = clampf(labelScale * 0.45f, 0.62f, 0.85f); // small label in the swatch's top-right corner
+        // Rectangular swatches: a compact pill height; width is the longer of the (small) name + padding and
+        // a floor tied to the height, so swatches read as consistent colour tiles.
+        themeSwatchH = clamp(Math.round(rowH * 1.14f), 19, 36); // 20% taller
+        float maxNameW = 0f;
+        for (ThemeDef t : THEMES) maxNameW = Math.max(maxNameW, GuiRender.textWidth(t.name, themeNameScale, MED));
+        int hPad = clamp(Math.round(themeSwatchH * 0.6f), 9, 18);
+        themeSwatchW = Math.max(Math.round(maxNameW) + 2 * hPad, Math.round(themeSwatchH * 2.1f));
+        themeSwatchGap = clamp(Math.round(themeSwatchH * 0.34f), 4, 10);
+        themeHeaderScale = clampf(labelScale * 0.62f, 0.78f, 1.1f);                  // "Themes" heading
+        themeHeaderH = Math.round(BedwarsQolFont.height(themeHeaderScale)) + clamp(Math.round(rowH * 0.1f), 2, 5);
+        int topPad = themeSwatchTopPad();
+        carouselTop = contentTop;
+        themeSwatchTop = carouselTop + themeHeaderH + topPad;                        // swatch row sits below the heading
+        int bandH = themeHeaderH + topPad + themeSwatchH + topPad;
+        carouselBottom = contentTop + bandH;
+        flatRowsTop = carouselBottom + clamp(Math.round(rowH * 0.22f), 3, 8);
+
+        int n = THEMES.length;
+        int stripW = n * themeSwatchW + (n - 1) * themeSwatchGap;
+        int bandW = contentRight - contentX;
+        if (stripW <= bandW) {
+            themeScrollMax = 0;
+            themeStripX0 = contentX + (bandW - stripW) / 2;
+        } else {
+            themeScrollMax = stripW - bandW;
+            themeStripX0 = contentX;
+        }
+        themeScroll = clamp(themeScroll, 0, themeScrollMax);
+    }
+
+    private int themeSwatchTopPad() {
+        return clamp(Math.round(rowH * 0.16f), 3, 7);
+    }
+
+    /** Screen rect [x1,y1,x2,y2] of swatch {@code i} (accounts for the horizontal scroll offset). */
+    private float[] themeSwatchRect(int i) {
+        float x1 = themeStripX0 - themeScroll + i * (themeSwatchW + themeSwatchGap);
+        float y1 = themeSwatchTop;
+        return new float[]{x1, y1, x1 + themeSwatchW, y1 + themeSwatchH};
+    }
+
+    /** Draws the rounded-rectangle theme strip: each swatch is a mini module card — the theme's card fill
+     *  over an opaque base, framed by its complementary (enabled-border) colour — with the theme name
+     *  centred inside. The selected swatch gets a crisp white keyline; hover thickens its frame. */
+    private void drawThemeCarousel(int mouseX, int mouseY) {
+        int sel = settings().moduleTheme;
+        if (sel < 0 || sel >= THEMES.length) sel = 0;
+        // Left-aligned "Themes" heading above the swatch strip.
+        GuiRender.text("Themes", contentX, vcenter(carouselTop, themeHeaderH, themeHeaderScale),
+                themeHeaderScale, TEXT_HI, MED);
+        boolean clip = themeScrollMax > 0;
+        if (clip) GuiRender.beginScissor(contentX, carouselTop, contentRight, carouselBottom);
+        float r = clampf(themeSwatchH * 0.12f, 2f, 3f); // tight rounded corners
+        for (int i = 0; i < THEMES.length; i++) {
+            ThemeDef t = THEMES[i];
+            float[] s = themeSwatchRect(i);
+            float x1 = s[0], y1 = s[1], x2 = s[2], y2 = s[3];
+            if (clip && (x2 < contentX || x1 > contentRight)) continue; // cull fully off-band swatches
+            boolean selected = i == sel;
+            boolean hover = GuiRender.inside(mouseX, mouseY, x1, y1, x2, y2);
+            GuiRender.roundedRect(x1, y1, x2, y2, r, 0xFF0E0E0E); // opaque base under the translucent fill
+            GuiRender.gradientRoundedRectH(x1, y1, x2, y2, r, gradHi(t.bg), gradLo(t.bg)); // theme fill, left→right sheen
+            int frame = selected ? PANEL_BORDER : t.borderOn;     // complementary colour, white when selected
+            GuiRender.roundedRectOutline(x1, y1, x2, y2, r, selected ? 1.0f : (hover ? 0.8f : 0.6f), frame);
+            // Theme name: a small label tucked into the top-right corner (right-aligned), not centred.
+            float namePad = clampf(themeSwatchH * 0.14f, 2.5f, 5f);
+            String nm = ellipsize(t.name, themeNameScale, (x2 - x1) - 2f * namePad);
+            float nameW = GuiRender.textWidth(nm, themeNameScale, MED);
+            GuiRender.text(nm, x2 - namePad - nameW, y1 + namePad, themeNameScale,
+                    (selected || hover) ? TEXT_HI : TEXT_MID, MED);
+        }
+        if (clip) GuiRender.endScissor();
+        // Hairline separating the carousel band from the rows below.
+        GuiRender.divider(contentX, contentRight, flatRowsTop - clamp(Math.round(rowH * 0.11f), 2, 4), SEPARATOR);
+    }
+
+    /** Handles a click in the carousel band: selects the swatch under the cursor (saving + re-resolving),
+     *  and consumes any click inside the band so it never falls through to the rows. Returns true if handled. */
+    private boolean themeCarouselClick(int mouseX, int mouseY, ClientSettings cfg) {
+        if (mouseY < carouselTop || mouseY > carouselBottom || mouseX < contentX || mouseX > contentRight) {
+            return false;
+        }
+        for (int i = 0; i < THEMES.length; i++) {
+            float[] s = themeSwatchRect(i);
+            if (GuiRender.inside(mouseX, mouseY, s[0], s[1], s[2], s[3])) {
+                if (cfg.moduleTheme != i) {
+                    cfg.moduleTheme = i;
+                    resolveTheme();
+                    cfg.save();
+                }
+                playClick();
+                return true;
+            }
+        }
+        return true; // inside the band but between swatches — swallow it
+    }
+
     /** Right-aligned checkbox: an empty rounded square (keyline) when off, filled solid white when on.
      *  Simple, elegant, modern — replaces the old pill switch. */
     private void drawCheckbox(Row row, boolean on, boolean enabled) {
         // Small box; vertically centered on the row (== the label's vertical center, since the label is
         // font-centered in the same row height).
-        float size = clampf(row.h * (row.def.child ? 0.22f : 0.26f),
-                row.def.child ? 5f : 6f, row.def.child ? 7f : 8.5f);
+        // Expanded-module sub-setting (child) checkboxes are smaller than the base box: two successive
+        // 15% reductions at the user's request (× 0.85 × 0.85 = 0.7225).
+        float childK = 0.7225f;
+        float size = clampf(row.h * (row.def.child ? 0.195f * childK : 0.23f),
+                row.def.child ? 4.5f * childK : 5.5f, row.def.child ? 6f * childK : 7.5f);
         float rightPad = controlRightPad(row.h); // inset from the row's right edge (shared with the dropdown)
         float x2 = row.x + row.w - rightPad;
         float x1 = x2 - size;
         float y1 = row.y + (row.h - size) / 2f;
         float y2 = y1 + size;
-        float r = clampf(size * 0.22f, 1.2f, 2f);
+        float r = clampf(size * 0.14f, 0.8f, 1.4f); // tighter corners
         if (on) {
             GuiRender.roundedRect(x1, y1, x2, y2, r, enabled ? KNOB_ON : KNOB_DISABLED);
         } else {
@@ -993,7 +1338,7 @@ public class SettingsGui extends GuiScreen {
         float[] c = dropdownRect(row);
         boolean open = openDropdownKind == row.def.kind;
         boolean hover = enabled && GuiRender.inside(mouseX, mouseY, c[0], c[1], c[2], c[3]);
-        float r = (c[3] - c[1]) * 0.28f;
+        float r = (c[3] - c[1]) * 0.13f; // tight corners
         GuiRender.roundedRect(c[0], c[1], c[2], c[3], r, (hover || open) ? BTN_HOVER : BTN_BG);
         GuiRender.roundedRectOutline(c[0], c[1], c[2], c[3], r, 0.75f, open ? PANEL_BORDER : BTN_BORDER);
         float padX = ddPadX(row.h);
@@ -1030,7 +1375,7 @@ public class SettingsGui extends GuiScreen {
         float x1 = x2 - w;
         float totalH = n * itemH + padY * 2f;
         float y1 = ddY2 + 2f;        // below the trigger by default
-        float limitTop = panelY + pad;
+        float limitTop = contentTop; // never flip a menu up into the header band
         float limitBottom = panelY + panelH - pad;
         if (y1 + totalH > limitBottom) {
             float above = ddY1 - 2f - totalH;
@@ -1044,7 +1389,7 @@ public class SettingsGui extends GuiScreen {
         if (openDropdownKind == 0 || ddOptions == null) return;
         float[] g = dropdownListGeom();
         float x1 = g[0], y1 = g[1], x2 = g[2], y2 = g[3], itemH = g[4];
-        float padY = 2f, r = 4f;
+        float padY = 2f, r = 2.5f; // tight corners, matching the trigger
         GuiRender.roundedRect(x1, y1, x2, y2, r, DD_BG);
         int sel = stepperIndex(settings(), openDropdownKind);
         // Fill each highlighted row up to the keyline's inner SOLID edge (geom - 0.5 = stroke 0.75
@@ -1102,11 +1447,21 @@ public class SettingsGui extends GuiScreen {
         return top + (boxH - BedwarsQolFont.height(scale)) / 2f;
     }
 
+    /** Optically centres text in [top, top+boxH] by its visible cap bounds (cap-top → baseline) rather
+     *  than the full line box, so prominent centred text (the header title/button) doesn't read slightly
+     *  high from the line box's unused descender space. */
+    private static float vcenterOptical(float top, float boxH, float scale, BedwarsQolFont.Weight weight) {
+        return top + (boxH - BedwarsQolFont.capHeight(scale, weight)) / 2f - BedwarsQolFont.capTop(scale, weight);
+    }
+
     // ---------------------------------------------------------------- input
 
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int mouseButton) throws IOException {
         super.mouseClicked(mouseX, mouseY, mouseButton);
+        // Remap into the fixed-"Large" virtual space the panel geometry lives in (identity at guiScale 3).
+        mouseX = Math.round(mouseX / uiScale);
+        mouseY = Math.round(mouseY / uiScale);
         commitSliderEdit();                       // any click finalizes an open numeric field (Task 2)
         ClientSettings cfg = settings();
 
@@ -1130,13 +1485,36 @@ public class SettingsGui extends GuiScreen {
         }
 
         if (mouseButton == 1) {                    // right-click: expand/collapse a card (search or section)
-            if (selectedSection == SEARCH_SECTION
-                    || (selectedSection != KEYBINDS_SECTION && SECTIONS[selectedSection].cards)) {
+            if (searchActive() || SECTIONS[selectedSection].cards) {
                 rightClickCards(mouseX, mouseY);
             }
             return;
         }
         if (mouseButton != 0) return;
+
+        // Header search bar (persistent): click to focus (and clear via the x); any other click blurs it.
+        boolean inSearchBar = GuiRender.inside(mouseX, mouseY, searchBarX1, searchBarY1, searchBarX2, searchBarY2);
+        searchFocused = inSearchBar;
+        if (inSearchBar) {
+            if (searchQuery.length() > 0
+                    && GuiRender.inside(mouseX, mouseY, searchClearX1, searchBarY1, searchClearX2, searchBarY2)) {
+                searchQuery.setLength(0);
+                resetScroll();
+                layoutContent();
+            }
+            playClick();
+            return;
+        }
+
+        // Edit HUD button pinned to the bottom of the sidebar — handle before section routing.
+        float[] hb = sidebarEditBtnRect();
+        if (GuiRender.inside(mouseX, mouseY, hb[0], hb[1], hb[2], hb[3])) {
+            stopEditing();
+            playClick();
+            cfg.save();
+            mc.displayGuiScreen(new EditHudGui());
+            return;
+        }
 
         // Scrollbar: grab the thumb to drag it, or click the track above/below to page.
         float[] sb = scrollbarGeom();
@@ -1148,7 +1526,7 @@ public class SettingsGui extends GuiScreen {
             } else {
                 int page = Math.max(rowH, (int) ((sb[3] - sb[2]) * 0.9f));
                 scroll = clamp(scroll + (mouseY < thumbY ? -page : page), 0, maxScroll);
-                if (selectedSection != KEYBINDS_SECTION) layoutContent(); // search & sections bake card y
+                layoutContent(); // search & sections bake card y
                 playClick();
             }
             return;
@@ -1157,13 +1535,14 @@ public class SettingsGui extends GuiScreen {
         for (int i = 0; i < SECTIONS.length; i++) {
             int y = navStartY + i * navItemH;
             if (GuiRender.inside(mouseX, mouseY, panelX, y, panelX + sidebarW, y + navItemH)) {
-                if (i != selectedSection) {
+                if (i != selectedSection || searchActive()) {
                     stopEditing();
                     selectedSection = i;
                     scroll = 0;
                     scrollRender = 0f;
                     scrollAccum = 0f;
-                    searchQuery.setLength(0); // each visit to the search page starts fresh
+                    themeScroll = 0;          // each visit to the Settings page starts the carousel at the left
+                    searchQuery.setLength(0); // leaving search: clear the query so the section shows
                     layoutContent();
                     playClick();
                 }
@@ -1171,13 +1550,9 @@ public class SettingsGui extends GuiScreen {
             }
         }
 
-        if (selectedSection == SEARCH_SECTION) {
-            searchClick(mouseX, mouseY, cfg);
-            return;
-        }
-
-        if (selectedSection == KEYBINDS_SECTION) {
-            keybindsClick(mouseX, mouseY, cfg);
+        // Search results are real module cards: same click model as a section.
+        if (searchActive()) {
+            cardsClick(mouseX, mouseY, cfg);
             return;
         }
 
@@ -1185,6 +1560,9 @@ public class SettingsGui extends GuiScreen {
             cardsClick(mouseX, mouseY, cfg);
             return;
         }
+
+        // Settings page: the theme carousel sits above the rows and consumes clicks in its band.
+        if (selectedSection == SETTINGS_SECTION && themeCarouselClick(mouseX, mouseY, cfg)) return;
 
         if (pinnedAction != null) {
             float[] b = bottomButton(pinnedAction.label);
@@ -1211,7 +1589,7 @@ public class SettingsGui extends GuiScreen {
                     cfg.save();
                     break;
                 case STEPPER:
-                    openDropdown(row, ddFontScale); // click the row -> open the value dropdown
+                    openDropdown(row, settingsRowLabelScale); // open the Settings dropdown (text matches the row label)
                     break;
                 case SLIDER: {
                     float[] tr = sliderTrack(row);
@@ -1335,6 +1713,7 @@ public class SettingsGui extends GuiScreen {
     public void onGuiClosed() {
         stopEditing();
         Keyboard.enableRepeatEvents(false);
+        GuiBlur.end(); // stop the blur and free its scratch framebuffers
         settings().save();
     }
 
@@ -1365,16 +1744,25 @@ public class SettingsGui extends GuiScreen {
     @Override
     public void handleMouseInput() throws IOException {
         super.handleMouseInput();
-        if (maxScroll <= 0) return;
         int dwheel = Mouse.getEventDWheel();
         if (dwheel == 0) return;
         if (openDropdownKind != 0) return; // an open dropdown is modal: swallow the wheel, don't scroll
+        // Theme carousel: while the cursor is over its band, the wheel pans the swatch strip horizontally
+        // (independent of — and even when there is no — vertical row scroll).
+        if (!searchActive() && selectedSection == SETTINGS_SECTION && themeScrollMax > 0
+                && lastMouseY >= carouselTop && lastMouseY <= carouselBottom
+                && lastMouseX >= contentX && lastMouseX <= contentRight) {
+            int step = Math.max(themeSwatchW / 2, 8);
+            themeScroll = clamp(themeScroll + (dwheel > 0 ? -step : step), 0, themeScrollMax);
+            return;
+        }
+        if (maxScroll <= 0) return;
         // Proportional, fine-grained wheel mapping. macOS LWJGL2 reports (int)(deltaY*120): only ~10-12
         // per slow notch (more when spun fast, or many small momentum deltas from a trackpad); Windows
         // ~120. Using the MAGNITUDE (not just the sign) makes a trackpad scroll finely and a wheel scroll
         // in sensible steps; the fractional accumulator preserves sub-pixel deltas through the int target,
         // and the per-frame ease (advanceScroll) smooths the coarse result on every platform.
-        int rh = Math.max(8, selectedSection == KEYBINDS_SECTION ? kbRowH : rowH);
+        int rh = Math.max(8, rowH);
         float delta = dwheel / 120f * (rh * 1.1f);     // ~1.1 rows per full notch; sub-notch deltas -> finer
         delta = clampf(delta, -rh * 2.5f, rh * 2.5f);  // clamp a fast flick so the target never teleports
         scrollAccum -= delta;                          // wheel up (dwheel>0) scrolls content up
@@ -1382,21 +1770,23 @@ public class SettingsGui extends GuiScreen {
         if (whole != 0) {
             scrollAccum -= whole;
             scroll = clamp(scroll + whole, 0, maxScroll);
-            // Keybinds reads scroll live (kbRowTop); cards (sections & search) bake y -> re-layout.
-            if (selectedSection != KEYBINDS_SECTION) layoutContent();
+            // Cards (sections & search) and the flat rows bake y from `scroll` -> re-layout.
+            layoutContent();
         }
     }
 
     @Override
     protected void mouseClickMove(int mouseX, int mouseY, int clickedMouseButton, long timeSinceLastClick) {
         super.mouseClickMove(mouseX, mouseY, clickedMouseButton, timeSinceLastClick);
+        mouseX = Math.round(mouseX / uiScale);
+        mouseY = Math.round(mouseY / uiScale);
         if (clickedMouseButton == 0 && draggingThumb) {
             float[] sb = scrollbarGeom();
             if (sb != null && sb[5] > 0f) {
                 float newTop = clampf(mouseY - sb[2] - thumbGrabDy, 0f, sb[5]);
                 scroll = clamp(Math.round(newTop / sb[5] * maxScroll), 0, maxScroll);
                 scrollRender = scroll; // track the cursor directly while dragging (no lag)
-                if (selectedSection != KEYBINDS_SECTION) layoutContent(); // search & sections bake card y
+                layoutContent(); // search & sections bake card y
             }
             return;
         }
@@ -1425,21 +1815,8 @@ public class SettingsGui extends GuiScreen {
             sliderEditKey(typedChar, keyCode);
             return;
         }
-        if (selectedSection == SEARCH_SECTION) {
+        if (searchFocused) {
             searchKey(typedChar, keyCode);
-            return;
-        }
-        // While capturing a macro's key, the next keypress sets it (ESC cancels) — swallow either way.
-        if (capturingKb >= 0) {
-            if (keyCode != Keyboard.KEY_ESCAPE) {
-                List<Keybind> kbs = settings().keybinds;
-                if (capturingKb < kbs.size()) {
-                    kbs.get(capturingKb).keyCode = keyCode;
-                    settings().save();
-                    playClick();
-                }
-            }
-            capturingKb = -1;
             return;
         }
         // While capturing the Debug spawn key, the next keypress binds it (ESC cancels) — swallow either way.
@@ -1450,11 +1827,6 @@ public class SettingsGui extends GuiScreen {
                 playClick();
             }
             capturingDummyKey = false;
-            return;
-        }
-        // While editing a message, route all keys to the inline text field (ESC/Enter commit).
-        if (editingKb >= 0) {
-            editMessageKey(typedChar, keyCode);
             return;
         }
         super.keyTyped(typedChar, keyCode);
@@ -1481,6 +1853,7 @@ public class SettingsGui extends GuiScreen {
             case K_LEVEL: return cfg.playerStatsShowLevel;
             case K_RANK: return cfg.playerStatsShowRank;
             case K_SWEATREPORT: return cfg.statsSweatReport;
+            case K_AUTOGG: return cfg.autoGg;
             case K_TAB_HEADERFOOTER: return cfg.tabHideHeaderFooter;
             case K_TAB_PING: return cfg.tabNumericPing;
             case K_KEYSTROKES: return cfg.keystrokesEnabled;
@@ -1518,6 +1891,7 @@ public class SettingsGui extends GuiScreen {
             case K_LEVEL: cfg.playerStatsShowLevel = !cfg.playerStatsShowLevel; break;
             case K_RANK: cfg.playerStatsShowRank = !cfg.playerStatsShowRank; break;
             case K_SWEATREPORT: cfg.statsSweatReport = !cfg.statsSweatReport; break;
+            case K_AUTOGG: cfg.autoGg = !cfg.autoGg; break;
             case K_TAB_HEADERFOOTER: cfg.tabHideHeaderFooter = !cfg.tabHideHeaderFooter; break;
             case K_TAB_PING: cfg.tabNumericPing = !cfg.tabNumericPing; break;
             case K_KEYSTROKES: cfg.keystrokesEnabled = !cfg.keystrokesEnabled; break;
@@ -1726,104 +2100,19 @@ public class SettingsGui extends GuiScreen {
         }
     }
 
-    // ---------------------------------------------------------------- keybinds view
-
-    private void drawKeybinds(int mouseX, int mouseY) {
-        List<Keybind> kbs = settings().keybinds;
-        boolean inView = mouseY >= kbListTop && mouseY <= kbListBottom;
-
-        float scrollDy = scroll - scrollRender; // shift live (target) row positions to the eased offset
-        GuiRender.beginScissor(contentX, kbListTop, contentRight, kbListBottom);
-        GlStateManager.pushMatrix();
-        GlStateManager.translate(0f, scrollDy, 0f);
-        if (kbs.isEmpty()) {
-            float ey = kbListTop + (kbListBottom - kbListTop) / 2f - BedwarsQolFont.height(valueScale) / 2f;
-            GuiRender.textCentered("No keybinds yet", (contentX + contentRight) / 2f, ey, valueScale, TEXT_LO);
-        } else {
-            for (int i = 0; i < kbs.size(); i++) {
-                int ry = kbRowTop(i);
-                if (ry + scrollDy + kbRowH < kbListTop || ry + scrollDy > kbListBottom) continue; // cull off-screen rows
-                drawKeybindRow(kbs.get(i), i, ry, mouseX, mouseY, inView);
-            }
-        }
-        GlStateManager.popMatrix();
-        GuiRender.endScissor();
-
-        if (maxScroll > 0) drawScrollbar(kbListTop, kbListBottom, kbs.size() * kbRowH);
-
-        boolean addHover = GuiRender.inside(mouseX, mouseY, kbAddX1, kbAddY1, kbAddX2, kbAddY2);
-        drawBottomButton(new float[]{kbAddX1, kbAddY1, kbAddX2, kbAddY2}, ADD_LABEL, addHover);
-    }
-
-    private void drawKeybindRow(Keybind kb, int i, int ry, int mouseX, int mouseY, boolean inView) {
-        boolean rowHover = inView && GuiRender.inside(mouseX, mouseY, contentX, ry, contentRight, ry + kbRowH);
-        if (rowHover) GuiRender.roundedRect(contentX, ry + 1, contentRight, ry + kbRowH - 1, 4, ROW_HOVER);
-        if (i > 0) GuiRender.divider(contentX, kbDelX2, ry - 0.5f, SEPARATOR);
-
-        int chipY1 = ry + kbVm, chipY2 = ry + kbRowH - kbVm;
-        float chipR = (chipY2 - chipY1) * 0.28f;
-
-        // key chip (click to capture a key)
-        boolean capturing = capturingKb == i;
-        boolean keyHover = inView && GuiRender.inside(mouseX, mouseY, contentX, chipY1, kbKeyX2, chipY2);
-        GuiRender.roundedRect(contentX, chipY1, kbKeyX2, chipY2, chipR, (keyHover || capturing) ? BTN_HOVER : BTN_BG);
-        GuiRender.roundedRectOutline(contentX, chipY1, kbKeyX2, chipY2, chipR, 0.75f, capturing ? PANEL_BORDER : BTN_BORDER);
-        String keyLabel = capturing ? "Press..." : keyName(kb.keyCode);
-        int keyColor = capturing ? TEXT_HI : (kb.keyCode == 0 ? TEXT_LO : TEXT_MID);
-        GuiRender.textCentered(ellipsize(keyLabel, kbChipScale, (kbKeyX2 - contentX) - 8f),
-                (contentX + kbKeyX2) / 2f, vcenter(ry, kbRowH, kbChipScale), kbChipScale, keyColor, MED);
-
-        // message (click to edit inline)
-        float msgY = vcenter(ry, kbRowH, valueScale);
-        int msgW = kbMsgX2 - kbMsgX1;
-        if (editingKb == i) {
-            drawMessageEditor(msgY, msgW);
-        } else {
-            String msg = kb.message == null ? "" : kb.message;
-            if (msg.isEmpty()) GuiRender.text("Click to set message", kbMsgX1, msgY, valueScale, TEXT_LO);
-            else GuiRender.text(ellipsize(msg, valueScale, msgW), kbMsgX1, msgY, valueScale, TEXT_HI);
-        }
-
-        // delete
-        boolean delHover = inView && GuiRender.inside(mouseX, mouseY, kbDelX1, chipY1, kbDelX2, chipY2);
-        if (delHover) GuiRender.roundedRect(kbDelX1, chipY1, kbDelX2, chipY2, 3, NAV_HOVER);
-        drawCross((kbDelX1 + kbDelX2) / 2f, (chipY1 + chipY2) / 2f, (chipY2 - chipY1) * 0.11f,
-                delHover ? TEXT_HI : TEXT_MID);
-    }
-
-    /** The inline message field: text shifted so the blinking caret stays inside the column. */
-    private void drawMessageEditor(float msgY, int msgW) {
-        String text = editBuf.toString();
-        int c = Math.min(caret, text.length());
-        float caretX = GuiRender.textWidth(text.substring(0, c), valueScale);
-        float offset = caretX > msgW - 2 ? caretX - (msgW - 2) : 0f;
-
-        GuiRender.beginScissor(kbMsgX1, kbListTop, kbMsgX2, kbListBottom); // clip to the message column
-        GuiRender.text(text, kbMsgX1 - offset, msgY, valueScale, TEXT_HI);
-        if ((caretBlink / 6) % 2 == 0) {
-            float cx = kbMsgX1 - offset + caretX;
-            GuiRender.rect(cx, msgY - 1, cx + 1, msgY + BedwarsQolFont.height(valueScale), TEXT_HI);
-        }
-        GuiRender.beginScissor(contentX, kbListTop, contentRight, kbListBottom); // restore list clip
-    }
-
     /** Active scrollbar geometry for the current section, or null when nothing scrolls.
      *  Indices: [0]=x1 [1]=x2 [2]=top [3]=bottom [4]=thumbH [5]=travel — mirrors {@link #drawScrollbar}. */
     private float[] scrollbarGeom() {
         if (maxScroll <= 0) return null;
-        int top, bottom, contentPx;
-        if (selectedSection == KEYBINDS_SECTION) {
-            top = kbListTop;
-            bottom = kbListBottom;
-            contentPx = settings().keybinds.size() * kbRowH;
-        } else if (selectedSection == SEARCH_SECTION) {
-            top = searchListTop;          // the card list lives below the search bar
-            bottom = searchListBottom;
-            contentPx = rowsBlockH;
+        int top, bottom, contentPx = rowsBlockH;
+        if (searchActive() || SECTIONS[selectedSection].cards) {
+            top = cardsViewTop;          // a card list (section view or search results)
+            bottom = cardsViewBottom;
         } else {
-            top = contentTop;
+            // Match drawRows: the Settings page drops its rows below the theme carousel (flatRowsTop),
+            // so the draggable thumb track must start there too — otherwise it sits over the carousel.
+            top = selectedSection == SETTINGS_SECTION ? flatRowsTop : contentTop;
             bottom = rowsViewBottom; // stop above any pinned bottom button, matching the row layout
-            contentPx = rowsBlockH;
         }
         int trackH = bottom - top;
         if (trackH <= 0 || contentPx <= 0) return null;
@@ -1835,13 +2124,13 @@ public class SettingsGui extends GuiScreen {
     private void drawScrollbar(int top, int bottom, int contentPx) {
         int trackH = bottom - top;
         if (trackH <= 0 || contentPx <= 0) return;
-        float x2 = contentRight, x1 = x2 - 1.5f; // half the previous 3px width
-        GuiRender.roundedRect(x1, top, x2, bottom, 0.75f, 0x14FFFFFF);
+        float x2 = contentRight, x1 = x2 - 1.0f; // thinner bar (was 1.5px)
+        GuiRender.roundedRect(x1, top, x2, bottom, 0.5f, 0x14FFFFFF);
         float thumbH = Math.max(14f, trackH * (trackH / (float) contentPx));
         float travel = trackH - thumbH;
         float t = maxScroll == 0 ? 0f : clampf(scrollRender / maxScroll, 0f, 1f);
         float thumbY = top + travel * t;
-        GuiRender.roundedRect(x1, thumbY, x2, thumbY + thumbH, 0.75f, 0x59FFFFFF);
+        GuiRender.roundedRect(x1, thumbY, x2, thumbY + thumbH, 0.5f, 0x59FFFFFF);
     }
 
     private void drawCross(float cx, float cy, float r, int color) {
@@ -1849,136 +2138,10 @@ public class SettingsGui extends GuiScreen {
         GuiRender.line(cx - r, cy + r, cx + r, cy - r, 0.75f, color);
     }
 
-    private void keybindsClick(int mouseX, int mouseY, ClientSettings cfg) {
-        if (GuiRender.inside(mouseX, mouseY, kbAddX1, kbAddY1, kbAddX2, kbAddY2)) {
-            addKeybind(cfg);
-            playClick();
-            return;
-        }
-        List<Keybind> kbs = cfg.keybinds;
-        if (mouseY >= kbListTop && mouseY <= kbListBottom) {
-            for (int i = 0; i < kbs.size(); i++) {
-                int ry = kbRowTop(i);
-                if (mouseY < ry || mouseY > ry + kbRowH) continue;
-                int chipY1 = ry + kbVm, chipY2 = ry + kbRowH - kbVm;
-                if (GuiRender.inside(mouseX, mouseY, kbDelX1, chipY1, kbDelX2, chipY2)) {
-                    stopEditing();
-                    kbs.remove(i);
-                    cfg.save();
-                    playClick();
-                    layoutKeybinds();
-                    return;
-                }
-                if (GuiRender.inside(mouseX, mouseY, contentX, chipY1, kbKeyX2, chipY2)) {
-                    startCapture(i);
-                    playClick();
-                    return;
-                }
-                if (GuiRender.inside(mouseX, mouseY, kbMsgX1, ry, kbMsgX2, ry + kbRowH)) {
-                    startEdit(i);
-                    playClick();
-                    return;
-                }
-                stopEditing(); // clicked the row but missed every control
-                return;
-            }
-        }
-        stopEditing(); // clicked empty space
-    }
-
-    private void addKeybind(ClientSettings cfg) {
-        stopEditing();
-        cfg.keybinds.add(new Keybind(Keyboard.KEY_NONE, ""));
-        cfg.save();
-        layoutKeybinds();
-        scroll = maxScroll;                           // reveal the new row
-        startCapture(cfg.keybinds.size() - 1);        // prompt for the key first
-    }
-
-    private void startCapture(int i) {
-        commitEdit();
-        capturingKb = i;
-        editingKb = -1;
-    }
-
-    private void startEdit(int i) {
-        if (editingKb == i) return; // already editing this row — keep the caret where it is
-        commitEdit();
-        capturingKb = -1;
-        editingKb = i;
-        editBuf.setLength(0);
-        String m = settings().keybinds.get(i).message;
-        if (m != null) editBuf.append(m);
-        caret = editBuf.length();
-        caretBlink = 0;
-    }
-
-    private void commitEdit() {
-        if (editingKb < 0) return;
-        List<Keybind> kbs = settings().keybinds;
-        if (editingKb < kbs.size()) {
-            kbs.get(editingKb).message = editBuf.toString();
-            settings().save();
-        }
-        editingKb = -1;
-    }
-
     private void stopEditing() {
-        commitEdit();
         commitSliderEdit();
-        capturingKb = -1;
         capturingDummyKey = false;
         closeDropdown();
-    }
-
-    private void editMessageKey(char typedChar, int keyCode) {
-        if (isKeyComboCtrlV(keyCode)) {
-            String clip = getClipboardString();
-            if (clip != null) {
-                for (int k = 0; k < clip.length() && editBuf.length() < MSG_MAX_LEN; k++) {
-                    char ch = clip.charAt(k);
-                    if (ChatAllowedCharacters.isAllowedCharacter(ch)) editBuf.insert(caret++, ch);
-                }
-                caretBlink = 0;
-            }
-            return;
-        }
-        switch (keyCode) {
-            case Keyboard.KEY_ESCAPE:
-            case Keyboard.KEY_RETURN:
-            case Keyboard.KEY_NUMPADENTER:
-                commitEdit();
-                return;
-            case Keyboard.KEY_BACK:
-                if (caret > 0) editBuf.deleteCharAt(--caret);
-                caretBlink = 0;
-                return;
-            case Keyboard.KEY_DELETE:
-                if (caret < editBuf.length()) editBuf.deleteCharAt(caret);
-                caretBlink = 0;
-                return;
-            case Keyboard.KEY_LEFT:
-                if (caret > 0) caret--;
-                caretBlink = 0;
-                return;
-            case Keyboard.KEY_RIGHT:
-                if (caret < editBuf.length()) caret++;
-                caretBlink = 0;
-                return;
-            case Keyboard.KEY_HOME:
-                caret = 0;
-                caretBlink = 0;
-                return;
-            case Keyboard.KEY_END:
-                caret = editBuf.length();
-                caretBlink = 0;
-                return;
-            default:
-                if (ChatAllowedCharacters.isAllowedCharacter(typedChar) && editBuf.length() < MSG_MAX_LEN) {
-                    editBuf.insert(caret++, typedChar);
-                    caretBlink = 0;
-                }
-        }
     }
 
     private static String keyName(int code) {
@@ -2009,19 +2172,16 @@ public class SettingsGui extends GuiScreen {
         }
     }
 
-    /** Filters + ranks the module list for the current query and lays out the search viewport. */
-    private void layoutSearch() {
-        int contentW = contentRight - contentX;
-        int barH = clamp(Math.round(rowH * 0.78f), 16, 26);
-        int barW = Math.round(contentW * 0.9f);
-        searchBarX1 = contentX + (contentW - barW) / 2;
-        searchBarX2 = searchBarX1 + barW;
-        searchBarY1 = contentTop;
-        searchBarY2 = contentTop + barH;
-        int clearW = clamp(Math.round(barH * 0.7f), 12, 20);
-        searchClearX2 = searchBarX2 - 4;
-        searchClearX1 = searchClearX2 - clearW;
-        searchListTop = searchBarY2 + clamp(Math.round(rowH * 0.3f), 4, 10);
+    /** True when a non-empty query is active — the content area shows search results instead of the
+     *  selected section. The search bar itself lives in the header and is always visible. */
+    private boolean searchActive() {
+        return searchQuery.toString().trim().length() > 0;
+    }
+
+    /** Filters + ranks the module list for the current query and lays the results out as module cards
+     *  across the full content band (the search bar lives in the header; geometry set in initGui). */
+    private void layoutSearchResults() {
+        searchListTop = contentTop;
         searchListBottom = contentTop + contentH;
 
         searchResults.clear();
@@ -2065,34 +2225,8 @@ public class SettingsGui extends GuiScreen {
         buildCards(moduleDefs, childDefs, searchListTop, Math.max(0, searchListBottom - searchListTop));
     }
 
-    private void drawSearch(int mouseX, int mouseY) {
-        String q = searchQuery.toString();
-
-        // search bar
-        GuiRender.roundedRect(searchBarX1, searchBarY1, searchBarX2, searchBarY2, CARD_R, CARD_OFF_BG);
-        GuiRender.roundedRectOutline(searchBarX1, searchBarY1, searchBarX2, searchBarY2, CARD_R, 0.75f, BTN_BORDER);
-        float barCy = (searchBarY1 + searchBarY2) / 2f;
-        float iconSize = (searchBarY2 - searchBarY1) * 0.5f;
-        Icons.draw(SEARCH_SECTION, searchBarX1 + 7 + iconSize / 2f, barCy, iconSize, TEXT_MID);
-        float textX = searchBarX1 + 7 + iconSize + 6;
-        float textRight = searchClearX1 - 6;
-        float ty = vcenter(searchBarY1, searchBarY2 - searchBarY1, valueScale);
-        if (q.isEmpty()) {
-            GuiRender.text("Search...", textX, ty, valueScale, TEXT_LO);
-        } else {
-            GuiRender.text(ellipsize(q, valueScale, textRight - textX), textX, ty, valueScale, TEXT_HI);
-        }
-        if ((caretBlink / 6) % 2 == 0) { // the bar is always focused on this page
-            float cx = Math.min(textX + GuiRender.textWidth(q, valueScale), textRight);
-            GuiRender.rect(cx, ty - 1, cx + 1, ty + BedwarsQolFont.height(valueScale), TEXT_HI);
-        }
-        if (!q.isEmpty()) {
-            boolean xHover = GuiRender.inside(mouseX, mouseY, searchClearX1, searchBarY1, searchClearX2, searchBarY2);
-            drawCross((searchClearX1 + searchClearX2) / 2f, barCy, (searchBarY2 - searchBarY1) * 0.16f,
-                    xHover ? TEXT_HI : TEXT_MID);
-        }
-
-        // results: identical module cards to a section (laid out by layoutSearch), or an empty-state line.
+    private void drawSearchResults(int mouseX, int mouseY) {
+        // The search bar is drawn in the header; here we render only the results (or an empty-state line).
         if (searchResults.isEmpty()) {
             GuiRender.textCentered("No matches", (contentX + contentRight) / 2f,
                     searchListTop + (searchListBottom - searchListTop) / 2f - BedwarsQolFont.height(valueScale) / 2f,
@@ -2102,42 +2236,26 @@ public class SettingsGui extends GuiScreen {
         }
     }
 
-    private void searchClick(int mouseX, int mouseY, ClientSettings cfg) {
-        if (searchQuery.length() > 0
-                && GuiRender.inside(mouseX, mouseY, searchClearX1, searchBarY1, searchClearX2, searchBarY2)) {
-            searchQuery.setLength(0);
-            resetScroll();
-            layoutSearch();
-            playClick();
-            return;
-        }
-        // The results are real module cards: same click model as a section (body = enable, "+" = expand).
-        cardsClick(mouseX, mouseY, cfg);
-    }
-
     private void searchKey(char typedChar, int keyCode) {
-        if (keyCode == Keyboard.KEY_ESCAPE) {
+        if (keyCode == Keyboard.KEY_ESCAPE) {       // ESC clears a query, else just blurs the field
             if (searchQuery.length() > 0) {
                 searchQuery.setLength(0);
                 resetScroll();
-                layoutSearch();
-            } else {
-                mc.displayGuiScreen(null); // ESC on an empty search closes the GUI
+                layoutContent();
             }
+            searchFocused = false;
             return;
         }
         if (keyCode == Keyboard.KEY_BACK) {
             if (searchQuery.length() > 0) searchQuery.deleteCharAt(searchQuery.length() - 1);
-            caretBlink = 0;
             resetScroll();
-            layoutSearch();
+            layoutContent();
             return;
         }
         if (ChatAllowedCharacters.isAllowedCharacter(typedChar) && searchQuery.length() < 48) {
             searchQuery.append(typedChar);
-            caretBlink = 0;
             resetScroll();
-            layoutSearch();
+            layoutContent();
         }
     }
 
@@ -2167,4 +2285,63 @@ public class SettingsGui extends GuiScreen {
         if (v < min) return min;
         return Math.min(v, max);
     }
+
+    // ---- gradient fill (OkLab / OkLCH-derived left→right sheen on module cards + theme swatches) ----
+    // Endpoints are computed in OkLab — a perceptually-uniform colour space (Björn Ottosson, 2020; the
+    // model behind CSS Color 4's `oklch`) — instead of naive sRGB channel scaling, which on dark colours
+    // barely moves and turns muddy. gradHi is a soft highlight (clearly lighter, a touch LESS chroma so it
+    // reads like light catching the surface, plus a few degrees of hue rotation); gradLo is a deeper shade
+    // (darker, slightly MORE chroma, opposite rotation). Drawn left (gradHi) → right (gradLo). The
+    // perceptual lightness delta is large enough to be obvious yet still tasteful. The base colour's alpha
+    // is preserved so card/swatch translucency is unchanged. Neutral greys (chroma 0) stay neutral.
+    private static int gradHi(int base) { return okShift(base,  0.105f, 0.90f,  5f); }
+    private static int gradLo(int base) { return okShift(base, -0.090f, 1.14f, -5f); }
+
+    /** Returns {@code argb} shifted in OkLCH by (+{@code dL} lightness, chroma ×{@code cMul},
+     *  +{@code dHueDeg} hue), then converted back to sRGB. The alpha byte is preserved. */
+    private static int okShift(int argb, float dL, float cMul, float dHueDeg) {
+        int alpha = argb >>> 24 & 0xFF;
+        float r = srgbToLinear((argb >> 16 & 0xFF) / 255f);
+        float g = srgbToLinear((argb >> 8 & 0xFF) / 255f);
+        float b = srgbToLinear((argb & 0xFF) / 255f);
+        // linear sRGB -> OkLab
+        float lm = 0.4122214708f * r + 0.5363325363f * g + 0.0514459929f * b;
+        float mm = 0.2119034982f * r + 0.6806995451f * g + 0.1073969566f * b;
+        float sm = 0.0883024619f * r + 0.2817188376f * g + 0.6299787005f * b;
+        float lc = (float) Math.cbrt(lm), mc = (float) Math.cbrt(mm), sc = (float) Math.cbrt(sm);
+        float L = 0.2104542553f * lc + 0.7936177850f * mc - 0.0040720468f * sc;
+        float A = 1.9779984951f * lc - 2.4285922050f * mc + 0.4505937099f * sc;
+        float Bb = 0.0259040371f * lc + 0.7827717662f * mc - 0.8086757660f * sc;
+        // OkLab -> OkLCH, apply the shifts, back to OkLab
+        float C = (float) Math.hypot(A, Bb);
+        float h = (float) Math.atan2(Bb, A) + (float) Math.toRadians(dHueDeg);
+        L = clampf(L + dL, 0f, 1f);
+        C = Math.max(0f, C * cMul);
+        A = C * (float) Math.cos(h);
+        Bb = C * (float) Math.sin(h);
+        // OkLab -> linear sRGB
+        float l_ = L + 0.3963377774f * A + 0.2158037573f * Bb;
+        float m_ = L - 0.1055613458f * A - 0.0638541728f * Bb;
+        float s_ = L - 0.0894841775f * A - 1.2914855480f * Bb;
+        l_ = l_ * l_ * l_; m_ = m_ * m_ * m_; s_ = s_ * s_ * s_;
+        float or =  4.0767416621f * l_ - 3.3077115913f * m_ + 0.2309699292f * s_;
+        float og = -1.2684380046f * l_ + 2.6097574011f * m_ - 0.3413193965f * s_;
+        float ob = -0.0041960863f * l_ - 0.7034186147f * m_ + 1.7076147010f * s_;
+        int R = clampByte(Math.round(linearToSrgb(or) * 255f));
+        int G = clampByte(Math.round(linearToSrgb(og) * 255f));
+        int Bc = clampByte(Math.round(linearToSrgb(ob) * 255f));
+        return (alpha << 24) | (R << 16) | (G << 8) | Bc;
+    }
+
+    private static float srgbToLinear(float c) {
+        return c <= 0.04045f ? c / 12.92f : (float) Math.pow((c + 0.055f) / 1.055f, 2.4f);
+    }
+
+    private static float linearToSrgb(float c) {
+        if (c <= 0f) return 0f;
+        if (c >= 1f) return 1f;
+        return c <= 0.0031308f ? 12.92f * c : 1.055f * (float) Math.pow(c, 1f / 2.4f) - 0.055f;
+    }
+
+    private static int clampByte(int v) { return v < 0 ? 0 : Math.min(255, v); }
 }
