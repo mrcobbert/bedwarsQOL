@@ -9,12 +9,15 @@ preview_urls = true
 [placement]
 mode = "smart"
 
-# Global L2 cache (Tier 2). Optional: the Worker degrades to per-colo caches.default if absent,
-# so a friend can self-host without KV. Create your own with:
-#   wrangler kv namespace create STATS_KV   (then paste the printed id below)
-[[kv_namespaces]]
-binding = "STATS_KV"
-id = "16fd5eea0e37475c91e5f255d45d82ce"
+# Global L2 cache (Tier 2). OFF by default so anyone can deploy to their own Cloudflare account —
+# a KV binding must reference a namespace that exists in THAT account, and a hardcoded id from
+# someone else's account makes `wrangler deploy` fail. The Worker degrades to the per-colo
+# caches.default when this binding is absent, so leaving it off just means no cross-colo L2 cache.
+# To enable it on your own account, create a namespace and uncomment the three lines with your id:
+#   wrangler kv namespace create STATS_KV
+# [[kv_namespaces]]
+# binding = "STATS_KV"
+# id = "<your-namespace-id>"
 
 # Optional: uncomment to re-run edge probe via `wrangler tail` (see README)
 # [triggers]
