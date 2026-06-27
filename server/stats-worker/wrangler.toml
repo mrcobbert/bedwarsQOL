@@ -4,6 +4,18 @@ compatibility_date = "2024-11-01"
 workers_dev = true
 preview_urls = true
 
+# Run the Worker near hypixel.net (it makes many same-origin subrequests), trimming per-scrape
+# latency. Takes ~15 min to take effect after deploy and only routes to colos it has run in.
+[placement]
+mode = "smart"
+
+# Global L2 cache (Tier 2). Optional: the Worker degrades to per-colo caches.default if absent,
+# so a friend can self-host without KV. Create your own with:
+#   wrangler kv namespace create STATS_KV   (then paste the printed id below)
+[[kv_namespaces]]
+binding = "STATS_KV"
+id = "16fd5eea0e37475c91e5f255d45d82ce"
+
 # Optional: uncomment to re-run edge probe via `wrangler tail` (see README)
 # [triggers]
 # crons = ["0 12 * * *"]

@@ -10,6 +10,7 @@ import com.bedwarsqol.feature.BlockOverlayRenderer;
 import com.bedwarsqol.feature.ClickTracker;
 import com.bedwarsqol.feature.TntFuseDisplay;
 import com.bedwarsqol.feature.NametagStats;
+import com.bedwarsqol.feature.PartyJoinAlert;
 import com.bedwarsqol.feature.PauseKeyHandler;
 import com.bedwarsqol.feature.PingTracker;
 import com.bedwarsqol.feature.SettingsKeyHandler;
@@ -61,6 +62,7 @@ public class BedwarsQol {
         MinecraftForge.EVENT_BUS.register(new BedwarsModeDetector());
         MinecraftForge.EVENT_BUS.register(new SweatReport());
         MinecraftForge.EVENT_BUS.register(new AutoGg());
+        MinecraftForge.EVENT_BUS.register(new PartyJoinAlert());
         MinecraftForge.EVENT_BUS.register(new GeneratorTracker());
         MinecraftForge.EVENT_BUS.register(new PingTracker());
         MinecraftForge.EVENT_BUS.register(new ClickTracker());

@@ -1,6 +1,7 @@
 package com.bedwarsqol.mixin;
 
 import com.bedwarsqol.BedwarsQol;
+import com.bedwarsqol.gui.render.GuiBlur;
 import net.minecraft.client.gui.GuiIngame;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.GlStateManager;
@@ -48,5 +49,12 @@ public class GuiIngameMixin {
     @Inject(method = "renderScoreboard", at = @At("RETURN"))
     private void bedwarsqol$scaleScoreboardEnd(ScoreObjective objective, ScaledResolution sr, CallbackInfo ci) {
         GlStateManager.popMatrix();
+    }
+
+    /** While the settings GUI's world-blur is up, skip the whole vanilla HUD so the blurred backdrop
+     *  stays clean (no smeared chat/scoreboard/hotbar showing through the translucent scrim). */
+    @Inject(method = "renderGameOverlay", at = @At("HEAD"), cancellable = true)
+    private void bedwarsqol$hideHudUnderBlur(float partialTicks, CallbackInfo ci) {
+        if (GuiBlur.isActive()) ci.cancel();
     }
 }

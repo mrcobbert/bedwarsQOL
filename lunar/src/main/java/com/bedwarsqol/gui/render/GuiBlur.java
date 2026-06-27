@@ -8,6 +8,7 @@ import net.minecraft.client.renderer.WorldRenderer;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.client.shader.Framebuffer;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL12;
 
 /**
  * Background blur for the custom GUI screens, done with raw OpenGL on the framebuffer — deliberately NOT
@@ -38,7 +39,7 @@ public final class GuiBlur {
 
     private static long openTimeMs;
     private static boolean active;
-    private static Framebuffer half, quarter, eighth; // scratch targets at 1/2, 1/4, 1/8 resolution
+    private static Framebuffer half, quarter, eighth, sixteenth; // scratch targets at 1/2, 1/4, 1/8, 1/16 resolution
     private static int builtW, builtH;                // base size the scratch FBOs were built for
 
     /** Start the fade-in. Cheap — the scratch FBOs are (re)built lazily in {@link #update()}. */
@@ -80,12 +81,15 @@ public final class GuiBlur {
             GlStateManager.enableTexture2D();
 
             // Downsample the live world, then upsample back — bilinear at each step does the blurring.
-            blit(main.framebufferTexture, half, 1f, false);     // 1/2
-            blit(half.framebufferTexture, quarter, 1f, false);  // 1/4
-            blit(quarter.framebufferTexture, eighth, 1f, false);// 1/8
-            blit(eighth.framebufferTexture, quarter, 1f, false);// up → 1/4
-            blit(quarter.framebufferTexture, half, 1f, false);  // up → 1/2
-            blit(half.framebufferTexture, main, eased, true);   // composite onto the screen, faded in
+            // Four octaves (down to 1/16) roughly double the blur radius of a 1/8 chain.
+            blit(main.framebufferTexture, half, 1f, false);         // 1/2
+            blit(half.framebufferTexture, quarter, 1f, false);      // 1/4
+            blit(quarter.framebufferTexture, eighth, 1f, false);    // 1/8
+            blit(eighth.framebufferTexture, sixteenth, 1f, false);  // 1/16
+            blit(sixteenth.framebufferTexture, eighth, 1f, false);  // up → 1/8
+            blit(eighth.framebufferTexture, quarter, 1f, false);    // up → 1/4
+            blit(quarter.framebufferTexture, half, 1f, false);      // up → 1/2
+            blit(half.framebufferTexture, main, eased, true);       // composite onto the screen, faded in
         } catch (Exception ignored) {
             // Never let a GL issue break the GUI — just render this frame without blur.
         } finally {
@@ -130,8 +134,10 @@ public final class GuiBlur {
         GlStateManager.bindTexture(srcTex);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
-        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL11.GL_CLAMP);
-        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL11.GL_CLAMP);
+        // CLAMP_TO_EDGE (not GL_CLAMP): GL_CLAMP bleeds the transparent texture border into the edge
+        // texels when down/upsampling, which left a sharp un-blurred band at the screen edges.
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
+        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
         if (blend) {
             GlStateManager.enableBlend();
             GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
@@ -158,6 +164,7 @@ public final class GuiBlur {
         half = newScratch(Math.max(1, w / 2), Math.max(1, h / 2));
         quarter = newScratch(Math.max(1, w / 4), Math.max(1, h / 4));
         eighth = newScratch(Math.max(1, w / 8), Math.max(1, h / 8));
+        sixteenth = newScratch(Math.max(1, w / 16), Math.max(1, h / 16));
         Minecraft.getMinecraft().getFramebuffer().bindFramebuffer(false); // restore the main FBO binding
     }
 
@@ -171,6 +178,7 @@ public final class GuiBlur {
         if (half != null) { half.deleteFramebuffer(); half = null; }
         if (quarter != null) { quarter.deleteFramebuffer(); quarter = null; }
         if (eighth != null) { eighth.deleteFramebuffer(); eighth = null; }
+        if (sixteenth != null) { sixteenth.deleteFramebuffer(); sixteenth = null; }
         builtW = builtH = 0;
     }
 }

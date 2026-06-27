@@ -16,10 +16,17 @@ import java.io.Writer;
 import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -60,13 +67,27 @@ public final class StatsCache {
     private static final AtomicLong SEQ = new AtomicLong();
     private static final Gson GSON = new GsonBuilder().create();
 
+    /** HTTP worker pool. The Worker backend paces its own hypixel scrapes (and backs off on 429),
+     *  so the client only needs a few threads to overlap in-flight batches/lookups — NOT the old
+     *  single thread + 1300ms global gap that serialized a whole lobby into ~20s. */
+    private static final int FETCH_THREADS = 3;
+    /** Max players per batch request (a Bedwars lobby is <=16). */
+    private static final int MAX_BATCH = 16;
+    /** Brief window to let a whole lobby's tab/nametag fetches coalesce into one batch. */
+    private static final long COALESCE_WINDOW_MS = 80L;
+    private static final ExecutorService FETCHERS = Executors.newFixedThreadPool(FETCH_THREADS, r -> {
+        Thread t = new Thread(r, "BedwarsQol-StatsFetch");
+        t.setDaemon(true);
+        return t;
+    });
+
     private static volatile boolean dirty = false;
 
     static {
         load();
-        Thread worker = new Thread(StatsCache::workerLoop, "BedwarsQol-Stats");
-        worker.setDaemon(true);
-        worker.start();
+        Thread dispatcher = new Thread(StatsCache::dispatcherLoop, "BedwarsQol-StatsDispatch");
+        dispatcher.setDaemon(true);
+        dispatcher.start();
 
         Thread flusher = new Thread(StatsCache::flushLoop, "BedwarsQol-StatsFlush");
         flusher.setDaemon(true);
@@ -186,31 +207,130 @@ public final class StatsCache {
         return stats;
     }
 
-    private static void workerLoop() {
+    /**
+     * Drains the priority queue and dispatches work to {@link #FETCHERS}. A USER-priority task (a /bw
+     * or chat-hover lookup the player is waiting on) is fetched immediately as a single request; lower
+     * priority tasks (visible players, tab-only) are coalesced over a short window into one batch
+     * request, so a whole 16-player lobby resolves in one round trip instead of 16 serialized ones.
+     */
+    /**
+     * Drains the priority queue and dispatches work to {@link #FETCHERS}. A USER-priority task (a /bw
+     * or chat-hover lookup the player is waiting on) is fetched immediately as a single request; lower
+     * priority tasks (visible players, tab-only) are coalesced over a short window into one streaming
+     * batch request, so a whole lobby resolves over one round trip and renders progressively.
+     *
+     * <p><b>De-dup invariant:</b> a key stays in {@link #QUEUED} from enqueue until its result lands
+     * (cleared by {@link #submitSingle}/{@link #submitBatch}, NOT here at dequeue). Otherwise a player
+     * being scraped — not yet in CACHE — would be re-enqueued every render frame, firing redundant
+     * scrapes that trip hypixel's ~1.7/s per-IP rate limit and slow the whole lobby down.
+     */
+    private static void dispatcherLoop() {
         while (true) {
-            Task t;
+            Task first;
             try {
-                t = QUEUE.take();
+                first = QUEUE.take();
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
             }
-            QUEUED.remove(t.key);
 
+            if (first.priority == PRIORITY_USER) {
+                submitSingle(first);
+                continue;
+            }
+
+            // Background: let the rest of the lobby enqueue, then grab the whole batch at once.
+            List<Task> drained = new ArrayList<>();
+            drained.add(first);
             try {
-                if (getCachedByKey(t.key) != null) continue;
-                if (!useBackend()) continue;
-                if (!LIMITER.canRequest()) continue;
-                LIMITER.awaitSlot();
+                Thread.sleep(COALESCE_WINDOW_MS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+            QUEUE.drainTo(drained, MAX_BATCH - 1);
 
+            // Keep the priority lane crisp: any USER tasks swept in still go out immediately.
+            List<Task> batch = new ArrayList<>();
+            for (Task t : drained) {
+                if (t.priority == PRIORITY_USER) submitSingle(t);
+                else batch.add(t);
+            }
+            if (!batch.isEmpty()) submitBatch(batch);
+        }
+    }
+
+    private static void submitSingle(Task t) {
+        FETCHERS.submit(() -> {
+            try {
+                if (getCachedByKey(t.key) != null) return;
                 String backend = statsBackendUrl();
-                if (backend == null) continue;
-                if (t.playerName == null || t.playerName.isEmpty()) continue;
+                if (backend == null || t.playerName == null || t.playerName.isEmpty()) return;
                 put(t.key, ScraperBackendClient.fetch(t.playerName, backend, statsBackendToken(), false));
             } catch (Throwable other) {
                 put(t.key, BedwarsStats.error());
+            } finally {
+                QUEUED.remove(t.key); // done (or skipped) -> allow a future re-fetch
             }
-        }
+        });
+    }
+
+    /**
+     * Streams a batch: each player is cached and un-marked from {@link #QUEUED} the moment its NDJSON
+     * line arrives, so the HUD fills in progressively rather than waiting for the slowest scrape.
+     * Names that never resolve (network error) are marked ERROR (short TTL) so they retry soon.
+     */
+    private static void submitBatch(List<Task> batch) {
+        FETCHERS.submit(() -> {
+            String backend = statsBackendUrl();
+            // Map requested name -> task(s) (a name may back multiple keys); track who resolves.
+            Map<String, List<Task>> byName = new HashMap<>();
+            Set<String> names = new LinkedHashSet<>();
+            for (Task t : batch) {
+                if (t.playerName == null || t.playerName.isEmpty() || getCachedByKey(t.key) != null) {
+                    QUEUED.remove(t.key);
+                    continue;
+                }
+                byName.computeIfAbsent(t.playerName, k -> new ArrayList<>()).add(t);
+                names.add(t.playerName);
+            }
+            if (backend == null || names.isEmpty()) {
+                for (List<Task> ts : byName.values()) for (Task t : ts) QUEUED.remove(t.key);
+                return;
+            }
+            Set<String> resolved = new HashSet<>();
+            try {
+                ScraperBackendClient.fetchBatchStreaming(new ArrayList<>(names), backend, statsBackendToken(),
+                        (name, stats) -> {
+                            List<Task> ts = byName.get(name);
+                            if (ts == null) return;
+                            resolved.add(name);
+                            for (Task t : ts) {
+                                put(t.key, stats);
+                                QUEUED.remove(t.key); // clear in-flight as each player lands
+                            }
+                        },
+                        (name, level) -> {
+                            // Star arrives after the counters — upgrade the cached entry in place.
+                            List<Task> ts = byName.get(name);
+                            if (ts == null) return;
+                            for (Task t : ts) {
+                                Entry e = CACHE.get(t.key);
+                                if (e != null) put(t.key, e.stats.withLevel(level));
+                            }
+                        });
+            } catch (Throwable other) {
+                // unresolved tasks marked ERROR in finally
+            } finally {
+                for (Map.Entry<String, List<Task>> e : byName.entrySet()) {
+                    if (resolved.contains(e.getKey())) continue;
+                    for (Task t : e.getValue()) {
+                        put(t.key, BedwarsStats.error());
+                        QUEUED.remove(t.key);
+                    }
+                }
+            }
+        });
     }
 
     private static void put(String key, BedwarsStats stats) {
@@ -322,6 +442,7 @@ public final class StatsCache {
         String state;
         String displayName;
         int networkLevel;
+        int bedwarsLevel;
         String rankPrefix;
         ModeDTO overall;
         ModeDTO solo;
@@ -337,6 +458,7 @@ public final class StatsCache {
             pe.state = s.state.name();
             pe.displayName = s.displayName;
             pe.networkLevel = s.networkLevel;
+            pe.bedwarsLevel = s.bedwarsLevel;
             pe.rankPrefix = s.rankPrefix;
             pe.overall = ModeDTO.from(s.overall);
             pe.solo = ModeDTO.from(s.solo);
@@ -351,7 +473,7 @@ public final class StatsCache {
             if (state == null) return null;
             switch (state) {
                 case "OK":
-                    return BedwarsStats.ok(displayName, networkLevel, rankPrefix,
+                    return BedwarsStats.ok(displayName, networkLevel, bedwarsLevel, rankPrefix,
                             ModeDTO.toOrEmpty(overall), ModeDTO.toOrEmpty(solo), ModeDTO.toOrEmpty(doubles),
                             ModeDTO.toOrEmpty(threes), ModeDTO.toOrEmpty(fours));
                 case "NEVER_PLAYED":

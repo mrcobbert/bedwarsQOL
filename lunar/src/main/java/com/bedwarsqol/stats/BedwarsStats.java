@@ -39,6 +39,8 @@ public final class BedwarsStats {
     public final State state;
     public final String displayName;
     public final int networkLevel;
+    /** Real Bedwars star (level), scraped from the achievements page; 0 when not yet known. */
+    public final int bedwarsLevel;
     /** Pre-colored §-prefixed rank label, e.g. {@code §b[MVP§c+§b]}; empty for no rank. */
     public final String rankPrefix;
 
@@ -59,12 +61,13 @@ public final class BedwarsStats {
     public final int deaths;
     public final double kd;
 
-    private BedwarsStats(State state, String displayName, int networkLevel, String rankPrefix,
-                         ModeStats overall, ModeStats solo, ModeStats doubles,
+    private BedwarsStats(State state, String displayName, int networkLevel, int bedwarsLevel,
+                         String rankPrefix, ModeStats overall, ModeStats solo, ModeStats doubles,
                          ModeStats threes, ModeStats fours) {
         this.state = state;
         this.displayName = displayName;
         this.networkLevel = Math.max(0, networkLevel);
+        this.bedwarsLevel = Math.max(0, bedwarsLevel);
         this.rankPrefix = rankPrefix == null ? "" : rankPrefix;
         this.overall = overall == null ? ModeStats.EMPTY : overall;
         this.solo = solo == null ? ModeStats.EMPTY : solo;
@@ -84,21 +87,32 @@ public final class BedwarsStats {
     }
 
     public static BedwarsStats nicked() {
-        return new BedwarsStats(State.NICKED, null, 0, "", null, null, null, null, null);
+        return new BedwarsStats(State.NICKED, null, 0, 0, "", null, null, null, null, null);
     }
 
     public static BedwarsStats error() {
-        return new BedwarsStats(State.ERROR, null, 0, "", null, null, null, null, null);
+        return new BedwarsStats(State.ERROR, null, 0, 0, "", null, null, null, null, null);
     }
 
     public static BedwarsStats neverPlayed(String displayName) {
-        return new BedwarsStats(State.NEVER_PLAYED, displayName, 0, "", null, null, null, null, null);
+        return new BedwarsStats(State.NEVER_PLAYED, displayName, 0, 0, "", null, null, null, null, null);
     }
 
-    public static BedwarsStats ok(String displayName, int networkLevel, String rankPrefix,
+    public static BedwarsStats ok(String displayName, int networkLevel, int bedwarsLevel, String rankPrefix,
                                   ModeStats overall, ModeStats solo, ModeStats doubles,
                                   ModeStats threes, ModeStats fours) {
-        return new BedwarsStats(State.OK, displayName, networkLevel, rankPrefix,
+        return new BedwarsStats(State.OK, displayName, networkLevel, bedwarsLevel, rankPrefix,
+                overall, solo, doubles, threes, fours);
+    }
+
+    /**
+     * A copy with the Bedwars star filled in — used when the star arrives after the counters (the
+     * backend streams it as a follow-up once the achievements page resolves). A no-op for non-OK
+     * states or a non-positive/unchanged level.
+     */
+    public BedwarsStats withLevel(int level) {
+        if (state != State.OK || level <= 0 || level == bedwarsLevel) return this;
+        return new BedwarsStats(state, displayName, networkLevel, level, rankPrefix,
                 overall, solo, doubles, threes, fours);
     }
 
@@ -163,7 +177,10 @@ public final class BedwarsStats {
         }
         ModeStats m = statsFor(mode);
         StringBuilder header = new StringBuilder("§6§lBedWars");
-        if (showLevel && networkLevel > 0) header.append(" §r§7[").append(networkLevel).append("]");
+        if (showLevel) {
+            String tag = levelTag();
+            if (!tag.isEmpty()) header.append(" §r").append(tag);
+        }
         if (showRank && !rankPrefix.isEmpty()) header.append(" §r").append(rankPrefix);
         out.add(header.toString());
         out.add("§7FKDR: " + fkdrColor(m.fkdr) + fmt2(m.fkdr) + " §r§8| §7Finals: §f" + num(m.finalKills) + "§7/§f" + num(m.finalDeaths));
@@ -186,11 +203,43 @@ public final class BedwarsStats {
     }
 
     private void appendPrefix(StringBuilder sb, boolean showLevel, boolean showRank) {
-        if (showLevel && networkLevel > 0) {
-            sb.append("§7[").append(networkLevel).append("]§r ");
+        if (showLevel) {
+            String tag = levelTag();
+            if (!tag.isEmpty()) sb.append(tag).append("§r ");
         }
         if (showRank && !rankPrefix.isEmpty()) {
             sb.append(rankPrefix).append("§r ");
+        }
+    }
+
+    /**
+     * The bracketed level shown before the stats: the real Bedwars star (prestige-colored, with the
+     * {@code ✫} symbol) when known, else the network level as a fallback until the star resolves.
+     */
+    private String levelTag() {
+        if (bedwarsLevel > 0) return starTag(bedwarsLevel);
+        if (networkLevel > 0) return "§7[" + networkLevel + "]";
+        return "";
+    }
+
+    /** {@code [<star>✫]} colored by prestige tier (simplified to one color per 100 levels). */
+    public static String starTag(int star) {
+        return starColor(star) + "[" + star + "✫]§r";
+    }
+
+    private static String starColor(int star) {
+        switch (star / 100) {
+            case 0:  return "§7"; // Stone
+            case 1:  return "§f"; // Iron
+            case 2:  return "§6"; // Gold
+            case 3:  return "§b"; // Diamond
+            case 4:  return "§2"; // Emerald
+            case 5:  return "§3"; // Sapphire
+            case 6:  return "§4"; // Ruby
+            case 7:  return "§d"; // Crystal
+            case 8:  return "§9"; // Opal
+            case 9:  return "§5"; // Amethyst
+            default: return "§c"; // Rainbow (1000+) — single stand-in color
         }
     }
 

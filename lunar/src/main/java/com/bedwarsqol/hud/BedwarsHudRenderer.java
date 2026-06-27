@@ -9,6 +9,7 @@ import com.bedwarsqol.feature.TpsTracker;
 import com.bedwarsqol.stats.HypixelContext;
 import net.minecraft.client.Minecraft;
 import com.bedwarsqol.gui.render.BedwarsQolFont;
+import com.bedwarsqol.gui.render.GuiBlur;
 import com.bedwarsqol.gui.render.GuiRender;
 import com.bedwarsqol.gui.render.Theme;
 import net.minecraft.client.settings.KeyBinding;
@@ -82,7 +83,6 @@ public class BedwarsHudRenderer {
     private static final float KS_LETTER = 1.0f;  // letter scale within a cap
     // Qualified ref (HUD_BG_FILL is declared further down) — tracks the (now darker) HUD background panel.
     private static final int KS_FILL_OFF = BedwarsHudRenderer.HUD_BG_FILL;  // idle cap over the world
-    private static final int KS_FILL_OFF_PANEL = 0x26FFFFFF; // idle cap when the BG panel is on: faint light so keys stay visible against the dark panel
     private static final int KS_FILL_ON = 0x40FFFFFF;        // subtle highlight cap (pressed)
     private static final int KS_TEXT_OFF = 0xFFEDEDED;   // light letter on dark cap
     private static final int KS_TEXT_ON = 0xFFFFFFFF;    // letter brightens when pressed
@@ -99,6 +99,7 @@ public class BedwarsHudRenderer {
         Minecraft mc = Minecraft.getMinecraft();
         ClientSettings cfg = BedwarsQol.config;
         if (mc == null || mc.thePlayer == null || cfg == null) return;
+        if (GuiBlur.isActive()) return; // settings GUI open: its blurred backdrop replaces the HUD
         if (mc.gameSettings != null && mc.gameSettings.showDebugInfo) return;
 
         cfg.sanitize();
@@ -186,23 +187,66 @@ public class BedwarsHudRenderer {
         int pad = Math.max(2, Math.round(4f * scale));
         float x1 = box.x - pad, y1 = box.y - pad;
         float x2 = box.right() + pad, y2 = box.bottom() + pad;
-        GuiRender.rect(x1, y1, x2, y2, fill);
+        GuiRender.roundedRect(x1, y1, x2, y2, Theme.CARD_R, fill);
     }
 
     private static void drawHudBackground(HudBox box, float scale) {
         drawHudBackground(box, scale, HUD_BG_FILL);
     }
 
+    /**
+     * Per-row background chips for an icon-mode HUD (Potions / Gen Timers): one rounded panel hugging
+     * each row's number text — never a single connected column. Each chip wraps that row's actual drawn
+     * glyphs (measured in the BOLD weight the numbers render with) with compact, even padding, vertically
+     * centred on the visible glyph band so it sits dead-centre on the icon row at any scale and font.
+     *
+     * <p>Geometry mirrors the text draws ({@link #drawPotionImages} / {@link #drawIconCounts}) exactly:
+     * origin {@code tx = box.x + iconSize + gap}, per-row {@code ty = box.y + i*lineStep + (iconSize-9)/2}.
+     * {@code bandTop}/{@code bandH} come from the active font so the chip hugs the ink (cap-top → digit
+     * baseline), not the 9px line cell — Inter via capTop/capHeight (digits overshoot 'H' by one atlas
+     * unit, hence 25/24); the vanilla font fills roughly the top 7px of its cell.
+     */
+    private static void drawTextBgChips(HudBox box, float iconLocal, List<String> texts, float scale) {
+        if (texts.isEmpty()) return;
+        FontRenderer fr = Minecraft.getMinecraft().fontRendererObj;
+        float iconSize = iconLocal * scale;
+        float lineStep = iconSize + LINE_GAP * scale;
+        float tx = box.x + iconSize + POTION_ICON_TIMER_GAP * scale; // text origin X (matches the draw code)
+        float padX = 2.0f * scale, padY = 2.25f * scale;
+        float bandTop = hudVanillaFont ? 0f : BedwarsQolFont.capTop(scale, BedwarsQolFont.Weight.BOLD);
+        float bandH = hudVanillaFont ? 7f * scale
+                : BedwarsQolFont.capHeight(scale, BedwarsQolFont.Weight.BOLD) * (25f / 24f);
+        for (int i = 0; i < texts.size(); i++) {
+            String s = texts.get(i);
+            if (s == null || s.isEmpty()) continue;
+            float w = hudVanillaFont ? (fr != null ? fr.getStringWidth(s) * scale : 0f)
+                    : BedwarsQolFont.width(s, scale, BedwarsQolFont.Weight.BOLD);
+            if (w <= 0f) continue;
+            float ty = box.y + i * lineStep + (iconSize - TEXT_HEIGHT * scale) / 2f; // exact text draw ty
+            float gy = ty + bandTop;
+            float x1 = Math.round(tx - padX), y1 = Math.round(gy - padY);
+            float x2 = Math.round(tx + w + padX), y2 = Math.round(gy + bandH + padY);
+            GuiRender.roundedRect(x1, y1, x2, y2, Theme.CARD_R, HUD_BG_FILL);
+        }
+    }
+
     private static void drawPotionHud(Minecraft mc, ClientSettings cfg, boolean example) {
         HudBox box = potionBox(mc, cfg, example);
         if (box == null) return;
-        if (cfg.potionBackgroundEnabled) drawHudBackground(box, cfg.potionHudScale);
         if (cfg.hudDisplayMode == 1) {
             List<PotionEntry> entries = potionEntries(mc, example);
-            if (!entries.isEmpty()) drawPotionImages(mc, cfg, entries, box.x, box.y);
+            if (entries.isEmpty()) return;
+            if (cfg.potionBackgroundEnabled) {
+                // One compact chip per effect, hugging that timer's digits — never a single connected panel.
+                List<String> timers = new ArrayList<>(entries.size());
+                for (PotionEntry e : entries) timers.add(e.timer);
+                drawTextBgChips(box, POTION_ICON_SIZE, timers, cfg.potionHudScale);
+            }
+            drawPotionImages(mc, cfg, entries, box.x, box.y);
             return;
         }
 
+        if (cfg.potionBackgroundEnabled) drawHudBackground(box, cfg.potionHudScale); // text mode: one panel behind the lines
         List<Line> lines = potionLines(mc, example);
         if (!lines.isEmpty()) drawLines(mc.fontRendererObj, lines, box.x, box.y, cfg.potionHudScale);
     }
@@ -212,7 +256,6 @@ public class BedwarsHudRenderer {
         if (box == null) return;
         ItemStack leggings = currentLeggings(mc, example);
         if (leggings == null) return;
-        if (cfg.armorBackgroundEnabled) drawHudBackground(box, cfg.armorHudScale);
 
         if (cfg.hudDisplayMode == 1) {
             drawArmorIcon(mc, cfg, leggings, box.x, box.y);
@@ -637,7 +680,7 @@ public class BedwarsHudRenderer {
      * gutter between tiles. Drawn in the inventory HUD's local (pre-scaled) space.
      */
     private static void drawInventoryPanel() {
-        GuiRender.rect(0f, 0f, invPanelWidth(), invPanelHeight(), HUD_BG_FILL);
+        GuiRender.roundedRect(0f, 0f, invPanelWidth(), invPanelHeight(), Theme.CARD_R, HUD_BG_FILL);
         for (int r = 0; r < INV_ROWS; r++) {
             for (int c = 0; c < INV_COLS; c++) {
                 drawSlotTile(INV_GAP + c * INV_PITCH, INV_GAP + r * INV_PITCH);
@@ -709,7 +752,12 @@ public class BedwarsHudRenderer {
         if (box == null) return;
         float scale = diamond ? cfg.diamondTimerHudScale : cfg.emeraldTimerHudScale;
         // One shared "Gen Timers" toggle gates both boxes; each draws its own matching panel.
-        if (cfg.genTimersBackgroundEnabled) drawHudBackground(box, scale);
+        if (cfg.genTimersBackgroundEnabled) {
+            // Icon mode: one chip hugging the countdown digits (not the gem icon). Text mode is all text.
+            if (cfg.hudDisplayMode == 1)
+                drawTextBgChips(box, ARMOR_ICON_SIZE, Collections.singletonList(timerValue(example, diamond)), scale);
+            else drawHudBackground(box, scale);
+        }
         if (cfg.hudDisplayMode == 1) {
             drawIconCounts(mc, Collections.singletonList(timerEntry(example, diamond)), box.x, box.y, scale);
         } else {
@@ -750,11 +798,8 @@ public class BedwarsHudRenderer {
         HudBox box = keystrokesBox(mc, cfg, example);
         if (box == null) return;
         boolean[] st = keyStates(mc, example);
-        // Same panel fill as every other module. The caps are translucent-dark, so over this dark panel
-        // they'd disappear — switch their idle fill to a faint light so the keys read as raised caps.
-        boolean onPanel = cfg.keystrokesBackgroundEnabled;
-        if (onPanel) drawHudBackground(box, cfg.keystrokesHudScale);
-        int idleFill = onPanel ? KS_FILL_OFF_PANEL : KS_FILL_OFF;
+        // Translucent-dark idle caps over the world; pressed caps brighten.
+        int idleFill = KS_FILL_OFF;
 
         // Draw everything in local (unscaled) coordinates under one translate+scale, so the caps and
         // letters scale together through the modelview matrix.

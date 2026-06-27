@@ -1,13 +1,16 @@
 /**
  * BedwarsQol stats backend — scrapes hypixel.net/player/<name> from Cloudflare edge.
  *
- * GET /bedwars/<name>  -> Bedwars JSON for the mod
- * GET /test/<name>     -> diagnostic egress probe
- * GET /health          -> health check
+ * GET /bedwars/<name>          -> Bedwars JSON for one player (USER/immediate path)
+ * GET /bedwars/batch?names=a,b -> Bedwars JSON for many players in one call (background lobby path)
+ * GET /test/<name>             -> diagnostic egress probe
+ * GET /health                  -> health check
+ *
+ * Caching is two-tier (per-colo caches.default + optional global Workers KV); cache-miss scrapes are
+ * paced server-side with 429 backoff so the mod never has to rate-limit itself.
  */
 
-import { parseBedwarsFromHtml } from "./bedwars-parse.js";
-import { parseProfile } from "./profile-parse.js";
+import { getBedwars, streamBedwarsBatch } from "./scrape.js";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -15,7 +18,7 @@ const BROWSER_UA =
 const CHALLENGE_RE =
   /just a moment|cf-challenge|turnstile|challenge-platform|attention required/i;
 
-const CACHE_TTL_SEC = 900; // 15m, matches mod disk cache
+const NAME_RE = /^[A-Za-z0-9_]{1,16}$/;
 
 export default {
   async scheduled(event, env, ctx) {
@@ -28,12 +31,21 @@ export default {
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     if (path === "/" || path === "/health") {
-      if (path === "/health") {
-        return jsonResponse(await probeHypixelPlayer("beepor"));
+      if (path === "/health") return jsonResponse(await probeHypixelPlayer("beepor"));
+      return new Response(usageText(), { headers: { "content-type": "text/plain; charset=utf-8" } });
+    }
+
+    // Batch must be matched before the single /bedwars/<name> route ("batch" is a valid name pattern).
+    if (path === "/bedwars/batch") {
+      const denied = checkAuth(request, env);
+      if (denied) return denied;
+      const namesParam = url.searchParams.get("names") || "";
+      const names = namesParam.split(",").map((s) => decodeURIComponent(s.trim())).filter(Boolean);
+      if (names.length === 0) {
+        return jsonResponse({ success: false, error: "no_names" }, 400);
       }
-      return new Response(usageText(), {
-        headers: { "content-type": "text/plain; charset=utf-8" },
-      });
+      // Streams NDJSON (one line per player as it resolves) — not a buffered JSON response.
+      return streamBedwarsBatch(names, env, ctx);
     }
 
     const bedwars = path.match(/^\/bedwars\/([^/]+)$/);
@@ -41,11 +53,11 @@ export default {
       const denied = checkAuth(request, env);
       if (denied) return denied;
       const player = decodeURIComponent(bedwars[1]);
-      if (!/^[A-Za-z0-9_]{1,16}$/.test(player)) {
+      if (!NAME_RE.test(player)) {
         return jsonResponse({ success: false, error: "invalid_player_name", player }, 400);
       }
       const fresh = url.searchParams.get("fresh") === "1";
-      return jsonResponse(await fetchBedwars(player, ctx, fresh));
+      return jsonResponse(await getBedwars(player, env, ctx, fresh));
     }
 
     const test = path.match(/^\/test\/([^/]+)$/);
@@ -53,7 +65,7 @@ export default {
       const denied = checkAuth(request, env);
       if (denied) return denied;
       const player = decodeURIComponent(test[1]);
-      if (!/^[A-Za-z0-9_]{1,16}$/.test(player)) {
+      if (!NAME_RE.test(player)) {
         return jsonResponse({ error: "invalid_player_name", player }, 400);
       }
       return jsonResponse(await probeHypixelPlayer(player));
@@ -78,103 +90,7 @@ function checkAuth(request, env) {
   return null;
 }
 
-async function fetchBedwars(player, ctx, bypassCache = false) {
-  const cache = caches.default;
-  const cacheKey = new Request(
-    `https://bedwarsqol.internal/cache/bedwars/v2/${player.toLowerCase()}`
-  );
-
-  // bypassCache (from /bedwars/<name>?fresh=1, i.e. a manual /bw) skips the read but still
-  // writes below, so a manual refresh updates the shared edge entry for everyone.
-  if (!bypassCache) {
-    const cached = await cache.match(cacheKey);
-    if (cached) {
-      const body = await cached.json();
-      return { ...body, cached: true };
-    }
-  }
-
-  const scraped = await scrapePlayerHtml(player);
-  if (!scraped.ok) {
-    return scraped.body;
-  }
-
-  const parsed = parseBedwarsFromHtml(scraped.html, player);
-  // Only cache real results. Don't pin a parse failure (or transient NICKED) for the
-  // full TTL — those should be retried on the next lookup.
-  if (parsed.success === true) {
-    // Merge account-header fields (network level, rank, canonical-cased name).
-    const profile = parseProfile(scraped.html);
-    if (profile.displayName) parsed.displayName = profile.displayName;
-    parsed.networkLevel = profile.networkLevel ?? 0;
-    parsed.rank = profile.rank;
-
-    const response = new Response(JSON.stringify(parsed), {
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": `public, max-age=${CACHE_TTL_SEC}`,
-      },
-    });
-    ctx.waitUntil(cache.put(cacheKey, response.clone()));
-  }
-  return parsed;
-}
-
-async function scrapePlayerHtml(player) {
-  const target = `https://hypixel.net/player/${encodeURIComponent(player)}`;
-  let response;
-  try {
-    response = await fetch(target, {
-      method: "GET",
-      headers: {
-        "User-Agent": BROWSER_UA,
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-      },
-      redirect: "follow",
-    });
-  } catch (e) {
-    return {
-      ok: false,
-      body: {
-        success: false,
-        state: "ERROR",
-        displayName: player,
-        error: String(e && e.message ? e.message : e),
-      },
-    };
-  }
-
-  const html = await response.text();
-  if (response.status === 403 || (html.length < 50_000 && CHALLENGE_RE.test(html))) {
-    return {
-      ok: false,
-      body: {
-        success: false,
-        state: "ERROR",
-        displayName: player,
-        error: "blocked_by_cloudflare",
-        httpStatus: response.status,
-      },
-    };
-  }
-
-  if (response.status < 200 || response.status >= 300) {
-    return {
-      ok: false,
-      body: {
-        success: false,
-        state: "ERROR",
-        displayName: player,
-        error: "http_" + response.status,
-        httpStatus: response.status,
-      },
-    };
-  }
-
-  return { ok: true, html };
-}
-
+/** Diagnostic egress probe (full read, no cache) — used by /test, /health and the cron. */
 async function probeHypixelPlayer(player) {
   const target = `https://hypixel.net/player/${encodeURIComponent(player)}`;
   const started = Date.now();
@@ -221,15 +137,10 @@ async function probeHypixelPlayer(player) {
   const server = response.headers.get("server");
 
   let verdict;
-  if (response.status === 200 && hasBedwars) {
-    verdict = "PASS";
-  } else if (response.status === 403 || looksLikeChallenge) {
-    verdict = "BLOCKED";
-  } else if (response.status === 200 && !hasBedwars) {
-    verdict = "UNEXPECTED_HTML";
-  } else {
-    verdict = "FAIL";
-  }
+  if (response.status === 200 && hasBedwars) verdict = "PASS";
+  else if (response.status === 403 || looksLikeChallenge) verdict = "BLOCKED";
+  else if (response.status === 200 && !hasBedwars) verdict = "UNEXPECTED_HTML";
+  else verdict = "FAIL";
 
   return {
     ok: verdict === "PASS",
@@ -270,8 +181,9 @@ function usageText() {
   return [
     "BedwarsQol Hypixel stats Worker",
     "",
-    "  GET /bedwars/<player>  -> stats JSON for BedwarsQOL",
-    "  GET /test/<player>      -> diagnostic egress probe",
-    "  GET /health             -> health check",
+    "  GET /bedwars/<player>        -> stats JSON for one player",
+    "  GET /bedwars/batch?names=a,b -> stats JSON for many players in one call",
+    "  GET /test/<player>           -> diagnostic egress probe",
+    "  GET /health                  -> health check",
   ].join("\n");
 }

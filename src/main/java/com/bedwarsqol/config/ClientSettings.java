@@ -30,7 +30,6 @@ public class ClientSettings {
     public int armorHudY = 34;
     public int armorHudAnchor = 0;
     public float armorHudScale = 1.0f;
-    public boolean armorBackgroundEnabled = false;
 
     public boolean infoEnabled = false;
     public int infoHudX = 5;
@@ -69,7 +68,6 @@ public class ClientSettings {
     public int keystrokesHudY = -20;
     public int keystrokesHudAnchor = 8; // bottom-right by default
     public float keystrokesHudScale = 1.0f;
-    public boolean keystrokesBackgroundEnabled = false;
 
     public boolean playerStats = false;
     /** Nametag/tab stat overlays no longer have toggles — forced on with Player Stats (see sanitize). */
@@ -84,6 +82,9 @@ public class ClientSettings {
 
     /** Auto GG: say "gg" in chat once each time a BedWars game ends. */
     public boolean autoGg = false;
+
+    /** Party Join Alert: red "Party Joined" in chat when a premade team queues a 2s/3s/4s game. */
+    public boolean partyJoinAlert = false;
 
     // Stats come from a Cloudflare Worker that each user self-hosts (see server/stats-worker). No
     // public backend is shipped — never commit a real URL or token here. Users set their own via

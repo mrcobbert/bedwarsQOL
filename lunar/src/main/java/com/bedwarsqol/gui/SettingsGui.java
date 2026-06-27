@@ -42,12 +42,14 @@ public class SettingsGui extends GuiScreen {
     private static final int K_TAB_PING = 52;
     private static final int K_CHATHOVER = 53;
     // Per-module "Background" sub-toggles (draw a panel behind the HUD element).
-    private static final int K_POTION_BG = 60, K_ARMOR_BG = 61, K_INFO_BG = 62,
-            K_INVENTORY_BG = 63, K_GENTIMERS_BG = 64, K_KEYSTROKES_BG = 65;
+    private static final int K_POTION_BG = 60, K_INFO_BG = 62,
+            K_INVENTORY_BG = 63, K_GENTIMERS_BG = 64;
     // HUD text font: modern (Inter) vs vanilla Minecraft.
     private static final int K_HUDFONT = 66;
     // Auto GG: say "gg" once each time a BedWars game ends.
     private static final int K_AUTOGG = 67;
+    // Party Join Alert: red "Party Joined" when a premade team queues a 2s/3s/4s game.
+    private static final int K_PARTYJOIN = 68;
     private static final int K_SCOREBOARD_SIZE = 46, K_STYLEDTAB_SIZE = 47;
     private static final int K_SUPPRESSESC = 48;
     private static final int K_DUMMY = 49, K_DUMMY_KEY = 50, K_DUMMY_CLEAR = 51;
@@ -142,7 +144,6 @@ public class SettingsGui extends GuiScreen {
                     new RowDef(RowType.TOGGLE, "Background", K_POTION_BG, null, K_POTION),
                     new RowDef(RowType.TOGGLE, "Armor", "Equipped armor type", K_ARMOR),
                     new RowDef(RowType.TOGGLE, "In Game Only", K_ARMOR_INGAME, null, K_ARMOR),
-                    new RowDef(RowType.TOGGLE, "Background", K_ARMOR_BG, null, K_ARMOR),
                     new RowDef(RowType.TOGGLE, "Info", "FPS, CPS, TPS, ping", K_INFO),
                     new RowDef(RowType.TOGGLE, "Background", K_INFO_BG, null, K_INFO),
                     new RowDef(RowType.TOGGLE, "Inventory", "Stored items at a glance", K_INVENTORY),
@@ -151,8 +152,7 @@ public class SettingsGui extends GuiScreen {
                     new RowDef(RowType.TOGGLE, "Gen Timers", "Diamond and emerald timers", K_GENTIMERS),
                     new RowDef(RowType.TOGGLE, "Background", K_GENTIMERS_BG, null, K_GENTIMERS),
                     new RowDef(RowType.TOGGLE, "Keystrokes", "WASD and spacebar keys", K_KEYSTROKES),
-                    new RowDef(RowType.TOGGLE, "In Game Only", K_KEYSTROKES_INGAME, null, K_KEYSTROKES),
-                    new RowDef(RowType.TOGGLE, "Background", K_KEYSTROKES_BG, null, K_KEYSTROKES)),
+                    new RowDef(RowType.TOGGLE, "In Game Only", K_KEYSTROKES_INGAME, null, K_KEYSTROKES)),
             new Section("Combat", true,
                     new RowDef(RowType.TOGGLE, "Hand Position", "Move and resize held item", K_HANDPOS),
                     new RowDef(RowType.SLIDER, "X", K_HANDX, -1.0f, 1.0f, K_HANDPOS),
@@ -178,7 +178,8 @@ public class SettingsGui extends GuiScreen {
                     new RowDef(RowType.TOGGLE, "Show Level", K_LEVEL, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Rank", K_RANK, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Party Report", K_SWEATREPORT, null, K_STATS),
-                    new RowDef(RowType.TOGGLE, "Auto GG", "Say gg when a game ends", K_AUTOGG)),
+                    new RowDef(RowType.TOGGLE, "Auto GG", "Say gg when a game ends", K_AUTOGG),
+                    new RowDef(RowType.TOGGLE, "Party Join Alert", "Red 'Party Joined' when a party queues", K_PARTYJOIN)),
             new Section("Settings",
                     new RowDef(RowType.STEPPER, "GUI Size", K_GUISIZE, GUI_SIZES),
                     new RowDef(RowType.STEPPER, "HUD Size", K_HUDSIZE, TEXT_SIZES),
@@ -252,7 +253,7 @@ public class SettingsGui extends GuiScreen {
     private static final int SEARCH_BAR_BG = 0xD0343434;
     private static final int CARD_OFF_BORDER = 0x14FFFFFF;
     private static final int CARD_ON_BORDER = 0x3DFFFFFF;
-    private static final int CARD_R = 2;
+    private static final int CARD_R = Theme.CARD_R;
 
     /** A module-card colour preset: card fill + border (off / enabled), picked from the Settings carousel. */
     private static final class ThemeDef {
@@ -897,7 +898,7 @@ public class SettingsGui extends GuiScreen {
         float[] b = sidebarEditBtnRect();
         boolean hover = GuiRender.inside(mouseX, mouseY, b[0], b[1], b[2], b[3]);
         GuiRender.roundedRect(b[0], b[1], b[2], b[3], CARD_R, hover ? BTN_HOVER : BTN_BG);
-        GuiRender.roundedRectOutline(b[0], b[1], b[2], b[3], CARD_R, 0.75f, BTN_BORDER);
+        GuiRender.roundedRectOutline(b[0], b[1], b[2], b[3], CARD_R, 0.5f, PANEL_BORDER); // thin white keyline
         float s = navScale * 0.72f;
         GuiRender.textCentered(EDIT_HUD_LABEL, (b[0] + b[2]) / 2f, vcenter(b[1], b[3] - b[1], s), s,
                 hover ? TEXT_HI : TEXT_MID, MED);
@@ -967,13 +968,22 @@ public class SettingsGui extends GuiScreen {
         if (maxScroll > 0) drawScrollbar(viewTop, viewBottom, rowsBlockH);
     }
 
-    /** Minimal expand indicator: a "+" when collapsed, a single "-" bar when expanded (two crisp rects). */
+    /** Expand indicator: a "+" when collapsed, a "-" when expanded. Drawn as two filled rects snapped to
+     *  the device-pixel grid (center, thickness and arm length all whole device pixels), so the glyph stays
+     *  crisp and perfectly symmetric at every GUI size — the old sub-pixel AA "lines" rounded unevenly,
+     *  worst at Small where the "+" looked lopsided. One virtual unit = largeScaleFactor() device pixels. */
     private void drawExpandIcon(float cx, float cy, float w, boolean expanded, int color) {
-        float half = w / 2f;
-        float t = clampf(w * 0.07f, 0.55f, 0.75f); // thin AA bars, matching the hairline borders
-        GuiRender.line(cx - half, cy, cx + half, cy, t, color);       // horizontal bar (always)
+        float dp = 1f / largeScaleFactor();                          // one device pixel, in the panel's virtual units
+        int tpx = Math.max(2, Math.round(clampf(w * 0.16f, 0.5f, 0.9f) / dp)); // bar thickness in device px
+        tpx -= tpx & 1;                                              // force EVEN so the bar straddles a pixel boundary
+        int apx = Math.max(tpx + 1, Math.round(w * 0.5f / dp));      // half-length in device px (full reach ≈ w)
+        float gx = Math.round(cx / dp) * dp;                         // snap the center onto the device-pixel grid
+        float gy = Math.round(cy / dp) * dp;
+        float ht = (tpx / 2) * dp;                                   // half thickness (whole device px → crisp edges)
+        float arm = apx * dp;                                        // half length (whole device px → crisp ends)
+        GuiRender.rect(gx - arm, gy - ht, gx + arm, gy + ht, color);     // horizontal bar (the "-")
         if (!expanded) {
-            GuiRender.line(cx, cy - half, cx, cy + half, t, color);   // vertical bar -> makes a plus
+            GuiRender.rect(gx - ht, gy - arm, gx + ht, gy + arm, color); // vertical bar -> makes a "+"
         }
     }
 
@@ -1847,6 +1857,7 @@ public class SettingsGui extends GuiScreen {
             case K_RANK: return cfg.playerStatsShowRank;
             case K_SWEATREPORT: return cfg.statsSweatReport;
             case K_AUTOGG: return cfg.autoGg;
+            case K_PARTYJOIN: return cfg.partyJoinAlert;
             case K_TAB_HEADERFOOTER: return cfg.tabHideHeaderFooter;
             case K_TAB_PING: return cfg.tabNumericPing;
             case K_KEYSTROKES: return cfg.keystrokesEnabled;
@@ -1855,11 +1866,9 @@ public class SettingsGui extends GuiScreen {
             case K_INVENTORY_INGAME: return cfg.inventoryInGameOnly;
             case K_KEYSTROKES_INGAME: return cfg.keystrokesInGameOnly;
             case K_POTION_BG: return cfg.potionBackgroundEnabled;
-            case K_ARMOR_BG: return cfg.armorBackgroundEnabled;
             case K_INFO_BG: return cfg.infoBackgroundEnabled;
             case K_INVENTORY_BG: return cfg.inventoryBackgroundEnabled;
             case K_GENTIMERS_BG: return cfg.genTimersBackgroundEnabled;
-            case K_KEYSTROKES_BG: return cfg.keystrokesBackgroundEnabled;
             case K_BLOCKOVERLAY: return cfg.blockOverlayEnabled;
             case K_SEETHROUGH: return cfg.blockOverlaySeeThrough;
             case K_HANDPOS: return cfg.handPositionEnabled;
@@ -1885,6 +1894,7 @@ public class SettingsGui extends GuiScreen {
             case K_RANK: cfg.playerStatsShowRank = !cfg.playerStatsShowRank; break;
             case K_SWEATREPORT: cfg.statsSweatReport = !cfg.statsSweatReport; break;
             case K_AUTOGG: cfg.autoGg = !cfg.autoGg; break;
+            case K_PARTYJOIN: cfg.partyJoinAlert = !cfg.partyJoinAlert; break;
             case K_TAB_HEADERFOOTER: cfg.tabHideHeaderFooter = !cfg.tabHideHeaderFooter; break;
             case K_TAB_PING: cfg.tabNumericPing = !cfg.tabNumericPing; break;
             case K_KEYSTROKES: cfg.keystrokesEnabled = !cfg.keystrokesEnabled; break;
@@ -1893,11 +1903,9 @@ public class SettingsGui extends GuiScreen {
             case K_INVENTORY_INGAME: cfg.inventoryInGameOnly = !cfg.inventoryInGameOnly; break;
             case K_KEYSTROKES_INGAME: cfg.keystrokesInGameOnly = !cfg.keystrokesInGameOnly; break;
             case K_POTION_BG: cfg.potionBackgroundEnabled = !cfg.potionBackgroundEnabled; break;
-            case K_ARMOR_BG: cfg.armorBackgroundEnabled = !cfg.armorBackgroundEnabled; break;
             case K_INFO_BG: cfg.infoBackgroundEnabled = !cfg.infoBackgroundEnabled; break;
             case K_INVENTORY_BG: cfg.inventoryBackgroundEnabled = !cfg.inventoryBackgroundEnabled; break;
             case K_GENTIMERS_BG: cfg.genTimersBackgroundEnabled = !cfg.genTimersBackgroundEnabled; break;
-            case K_KEYSTROKES_BG: cfg.keystrokesBackgroundEnabled = !cfg.keystrokesBackgroundEnabled; break;
             case K_BLOCKOVERLAY: cfg.blockOverlayEnabled = !cfg.blockOverlayEnabled; break;
             case K_SEETHROUGH: cfg.blockOverlaySeeThrough = !cfg.blockOverlaySeeThrough; break;
             case K_HANDPOS: cfg.handPositionEnabled = !cfg.handPositionEnabled; break;

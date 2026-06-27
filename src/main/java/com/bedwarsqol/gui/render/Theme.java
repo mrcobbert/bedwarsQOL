@@ -33,5 +33,8 @@ public final class Theme {
     /** Panel corner radius (px) and the hairline border/outline thickness. Kept tight for a sleek,
      *  near-square modern look (only the settings-GUI panel consumes this). */
     public static final int PANEL_R = 3;
+    /** GUI module-card corner radius (px). HUD background panels reuse this so they read as the same
+     *  family as the settings cards. */
+    public static final int CARD_R = 2;
     public static final float BORDER_THICK = 0.75f;
 }

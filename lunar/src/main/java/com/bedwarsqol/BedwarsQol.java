@@ -10,6 +10,7 @@ import com.bedwarsqol.feature.ClickTracker;
 import com.bedwarsqol.feature.TntFuseDisplay;
 import com.bedwarsqol.feature.KeybindRegistry;
 import com.bedwarsqol.feature.NametagStats;
+import com.bedwarsqol.feature.PartyJoinAlert;
 import com.bedwarsqol.feature.PauseKeyHandler;
 import com.bedwarsqol.feature.PingTracker;
 import com.bedwarsqol.feature.SettingsKeyHandler;
@@ -47,6 +48,7 @@ public class BedwarsQol implements ModInitializer {
         EventBus.subscribe(new BedwarsModeDetector());
         EventBus.subscribe(new SweatReport());
         EventBus.subscribe(new AutoGg());
+        EventBus.subscribe(new PartyJoinAlert());
         EventBus.subscribe(new GeneratorTracker());
         EventBus.subscribe(new PingTracker());
         EventBus.subscribe(new ClickTracker());
