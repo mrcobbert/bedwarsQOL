@@ -319,12 +319,23 @@ public final class StatsCache {
                             }
                         });
             } catch (Throwable other) {
-                // unresolved tasks marked ERROR in finally
+                // unresolved tasks fall back to single lookups below
             } finally {
+                // Any player the batch didn't resolve falls back to a per-player lookup — the
+                // long-standing single path — instead of leaving the tab/nametag blank. This also
+                // covers a deployed Worker that predates the /bedwars/batch route: its single-route
+                // fallback returns one non-NDJSON object the stream can't map, so nothing resolves and
+                // everyone lands here. Once the batch Worker is deployed this branch goes quiet.
                 for (Map.Entry<String, List<Task>> e : byName.entrySet()) {
                     if (resolved.contains(e.getKey())) continue;
                     for (Task t : e.getValue()) {
-                        put(t.key, BedwarsStats.error());
+                        if (getCachedByKey(t.key) == null) {
+                            try {
+                                put(t.key, ScraperBackendClient.fetch(t.playerName, backend, statsBackendToken(), false));
+                            } catch (Throwable single) {
+                                put(t.key, BedwarsStats.error());
+                            }
+                        }
                         QUEUED.remove(t.key);
                     }
                 }
