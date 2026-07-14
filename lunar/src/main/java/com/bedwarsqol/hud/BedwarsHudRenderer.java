@@ -3,9 +3,6 @@ package com.bedwarsqol.hud;
 import com.bedwarsqol.BedwarsQol;
 import com.bedwarsqol.bedwars.GeneratorTracker;
 import com.bedwarsqol.config.ClientSettings;
-import com.bedwarsqol.feature.ClickTracker;
-import com.bedwarsqol.feature.PingTracker;
-import com.bedwarsqol.feature.TpsTracker;
 import com.bedwarsqol.stats.HypixelContext;
 import net.minecraft.client.Minecraft;
 import com.bedwarsqol.gui.render.BedwarsQolFont;
@@ -33,13 +30,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 
 public class BedwarsHudRenderer {
 
     public static final String POTION_HUD = "potion";
     public static final String ARMOR_HUD = "armor";
-    public static final String INFO_HUD = "info";
     public static final String INVENTORY_HUD = "inventory";
     public static final String DIAMOND_TIMER_HUD = "diamondtimer";
     public static final String EMERALD_TIMER_HUD = "emeraldtimer";
@@ -118,7 +113,6 @@ public class BedwarsHudRenderer {
         List<HudBox> boxes = new ArrayList<>(8);
         addBox(boxes, potionBox(mc, cfg, example));
         addBox(boxes, armorBox(mc, cfg, example));
-        addBox(boxes, infoBox(mc, cfg, example));
         addBox(boxes, inventoryBox(mc, cfg, example));
         addBox(boxes, timerBox(mc, cfg, example, true));
         addBox(boxes, timerBox(mc, cfg, example, false));
@@ -142,10 +136,6 @@ public class BedwarsHudRenderer {
             cfg.armorHudAnchor = anchor;
             cfg.armorHudX = storedX;
             cfg.armorHudY = storedY;
-        } else if (INFO_HUD.equals(id)) {
-            cfg.infoHudAnchor = anchor;
-            cfg.infoHudX = storedX;
-            cfg.infoHudY = storedY;
         } else if (INVENTORY_HUD.equals(id)) {
             cfg.inventoryHudAnchor = anchor;
             cfg.inventoryHudX = storedX;
@@ -169,7 +159,6 @@ public class BedwarsHudRenderer {
         hudVanillaFont = cfg.hudFont == 1;
         if (cfg.potionStatusEnabled) drawPotionHud(mc, cfg, example);
         if (cfg.armorTypeEnabled) drawArmorHud(mc, cfg, example);
-        if (cfg.infoEnabled) drawInfoHud(mc, cfg, example);
         drawInventoryHud(mc, cfg, example);
         drawTimerHud(mc, cfg, example, true);
         drawTimerHud(mc, cfg, example, false);
@@ -266,56 +255,6 @@ public class BedwarsHudRenderer {
         if (name != null) {
             drawLines(mc.fontRendererObj, Collections.singletonList(new Line(name)), box.x, box.y, cfg.armorHudScale);
         }
-    }
-
-    private static void drawInfoHud(Minecraft mc, ClientSettings cfg, boolean example) {
-        HudBox box = infoBox(mc, cfg, example);
-        if (box == null) return;
-        if (cfg.infoBackgroundEnabled) drawHudBackground(box, cfg.infoHudScale);
-        drawLines(mc.fontRendererObj, infoLines(mc, example), box.x, box.y, cfg.infoHudScale);
-    }
-
-    private static HudBox infoBox(Minecraft mc, ClientSettings cfg, boolean example) {
-        if (!cfg.infoEnabled) return null;
-        Size size = infoSize(mc, cfg, example);
-        if (size.width <= 0f || size.height <= 0f) return null;
-        ScaledResolution resolution = new ScaledResolution(mc);
-        float x = absoluteX(cfg.infoHudX, cfg.infoHudAnchor, size.width, resolution.getScaledWidth());
-        float y = absoluteY(cfg.infoHudY, cfg.infoHudAnchor, size.height, resolution.getScaledHeight());
-        return new HudBox(INFO_HUD, "Info HUD", x, y, size.width, size.height);
-    }
-
-    private static Size infoSize(Minecraft mc, ClientSettings cfg, boolean example) {
-        return textSize(mc.fontRendererObj, infoLines(mc, example), cfg.infoHudScale);
-    }
-
-    private static List<Line> infoLines(Minecraft mc, boolean example) {
-        if (example) {
-            List<Line> out = new ArrayList<>(4);
-            out.add(new Line("FPS: 120"));
-            out.add(new Line("Ping: 23ms"));
-            out.add(new Line("TPS: 20.0"));
-            out.add(new Line("CPS: 11"));
-            return out;
-        }
-        List<Line> lines = new ArrayList<>(4);
-        lines.add(new Line("FPS: " + Minecraft.getDebugFPS()));
-        lines.add(new Line("Ping: " + pingText()));
-        lines.add(new Line("TPS: " + formatTps()));
-        lines.add(new Line("CPS: " + ClickTracker.cps()));
-        return lines;
-    }
-
-    private static String pingText() {
-        int ping = PingTracker.ping();
-        return ping < 0 ? "--" : ping + "ms";
-    }
-
-    private static String formatTps() {
-        if (!TpsTracker.hasData()) return "--";
-        double t = TpsTracker.getTps();
-        if (t > 20.0) t = 20.0;
-        return String.format(Locale.US, "%.1f", t);
     }
 
     private static void drawLines(FontRenderer fr, List<Line> lines, float x, float y, float scale) {

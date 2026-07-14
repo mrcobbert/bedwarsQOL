@@ -1,5 +1,6 @@
 package com.bedwarsqol.stats;
 
+import com.bedwarsqol.config.ClientSettings;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.client.network.NetworkPlayerInfo;
@@ -40,6 +41,17 @@ public final class BedwarsModeDetector {
     /** The current mode, latched for the game. {@link BedwarsMode#UNKNOWN} until known. */
     public static BedwarsMode current() {
         return latched;
+    }
+
+    /**
+     * The mode a stats display should use: the user's forced {@code /bw mode} choice
+     * (all/solo/2s/3s/4s), or — when that is {@code auto} — the live per-game {@link #current()}
+     * detection ({@link BedwarsMode#UNKNOWN} in a lobby, which callers render as overall). Shared by the
+     * inline chat FKDR bracket and the chat hover card so both honour {@code /bw mode} identically.
+     */
+    public static BedwarsMode displayMode(ClientSettings cfg) {
+        BedwarsMode forced = cfg == null ? null : BedwarsMode.fromToken(cfg.chatStatsMode);
+        return forced != null ? forced : current();
     }
 
     public static void reset() {

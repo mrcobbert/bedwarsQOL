@@ -1,18 +1,19 @@
 package com.bedwarsqol;
 
+import com.bedwarsqol.anticheat.CheaterDetector;
 import com.bedwarsqol.bedwars.GeneratorTracker;
-import com.bedwarsqol.command.BedwarsStatsCommand;
 import com.bedwarsqol.command.BedwarsQolCommand;
 import com.bedwarsqol.config.ClientSettings;
 import com.bedwarsqol.config.SettingsManager;
 import com.bedwarsqol.feature.AutoGg;
-import com.bedwarsqol.feature.ClickTracker;
+import com.bedwarsqol.feature.ChatNameTags;
+import com.bedwarsqol.feature.DiagLog;
 import com.bedwarsqol.feature.TntFuseDisplay;
 import com.bedwarsqol.feature.KeybindRegistry;
 import com.bedwarsqol.feature.NametagStats;
+import com.bedwarsqol.feature.NickUtils;
 import com.bedwarsqol.feature.PartyJoinAlert;
 import com.bedwarsqol.feature.PauseKeyHandler;
-import com.bedwarsqol.feature.PingTracker;
 import com.bedwarsqol.feature.SettingsKeyHandler;
 import com.bedwarsqol.feature.SweatReport;
 import com.bedwarsqol.hud.BedwarsHudRenderer;
@@ -32,13 +33,15 @@ public class BedwarsQol implements ModInitializer {
 
     public static final String MODID = "bedwarsqol";
     public static final String NAME = "BedwarsQOL";
-    public static final String VERSION = "0.3.0";
+    public static final String VERSION = "0.3.15";
 
     public static ClientSettings config;
 
     @Override
     public void init() {
         config = SettingsManager.load();
+        DiagLog.init("BedwarsQOL v" + VERSION + " (lunar)");
+        CheaterDetector.logStartup();
 
         EventBus.subscribe(new KeybindRegistry());
         EventBus.subscribe(new SettingsKeyHandler());
@@ -49,12 +52,13 @@ public class BedwarsQol implements ModInitializer {
         EventBus.subscribe(new SweatReport());
         EventBus.subscribe(new AutoGg());
         EventBus.subscribe(new PartyJoinAlert());
+        EventBus.subscribe(new NickUtils());
+        EventBus.subscribe(new ChatNameTags());
         EventBus.subscribe(new GeneratorTracker());
-        EventBus.subscribe(new PingTracker());
-        EventBus.subscribe(new ClickTracker());
         EventBus.subscribe(new TntFuseDisplay());
+        EventBus.subscribe(CheaterDetector.get());
 
-        CommandBus.register(new BedwarsStatsCommand(), new BedwarsQolCommand());
+        CommandBus.register(new BedwarsQolCommand());
 
         System.out.println("[BedwarsQOL] Weave mod initialized (v" + VERSION + ")");
     }

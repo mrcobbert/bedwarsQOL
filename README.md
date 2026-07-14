@@ -42,7 +42,6 @@ That's it.
 ### HUD (draggable/resizable)
   - **Potion** - active potion effects + timers
   - **Armor** - your equipped armor
-  - **Info** - FPS, CPS, TPS, ping
   - **Inventory** - your stored items at a glance
   - **Gen Timers** - diamond/emerald spawn countdowns
   - **Keystrokes** - WASD + spacebar display

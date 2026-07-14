@@ -177,6 +177,8 @@ public final class BedwarsStats {
         }
         ModeStats m = statsFor(mode);
         StringBuilder header = new StringBuilder("§6§lBedWars");
+        String modeTag = hoverModeTag(mode);
+        if (modeTag != null) header.append(" §r§7(").append(modeTag).append("§7)");
         if (showLevel) {
             String tag = levelTag();
             if (!tag.isEmpty()) header.append(" §r").append(tag);
@@ -187,6 +189,22 @@ public final class BedwarsStats {
         out.add("§7WLR: §f" + fmt2(m.wlr) + " §8| §7W/L: §f" + num(m.wins) + "§7/§f" + num(m.losses));
         out.add("§7K/D: §f" + fmt2(m.kd) + " §8| §7Kills: §f" + num(m.kills));
         return out;
+    }
+
+    /**
+     * Short label for the mode the hover card is actually showing — {@code Solo}/{@code 2s}/{@code 3s}/
+     * {@code 4s} — or {@code null} for overall. Returns null when a specific mode was requested but the
+     * player has no games there, because {@link #statsFor} then falls back to overall and labelling it
+     * with the requested mode would misrepresent the numbers on screen.
+     */
+    private String hoverModeTag(BedwarsMode mode) {
+        switch (mode) {
+            case SOLO:    return solo    != null && solo.hasGames()    ? "Solo" : null;
+            case DOUBLES: return doubles != null && doubles.hasGames() ? "2s"   : null;
+            case THREES:  return threes  != null && threes.hasGames()  ? "3s"   : null;
+            case FOURS:   return fours   != null && fours.hasGames()   ? "4s"   : null;
+            default:      return null;
+        }
     }
 
     /** The bracketed label for non-OK states (or null when stats should render). */

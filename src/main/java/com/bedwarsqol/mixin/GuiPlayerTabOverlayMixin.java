@@ -1,6 +1,8 @@
 package com.bedwarsqol.mixin;
 
 import com.bedwarsqol.BedwarsQol;
+import com.bedwarsqol.config.ClientSettings;
+import com.bedwarsqol.feature.Denicks;
 import com.bedwarsqol.stats.HypixelContext;
 import com.bedwarsqol.stats.TabListLookup;
 import net.minecraft.client.Minecraft;
@@ -22,6 +24,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.ModifyConstant;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.Collection;
 
@@ -124,6 +127,24 @@ public abstract class GuiPlayerTabOverlayMixin {
             reserve += (int) Math.ceil(fr.getStringWidth(stats) * bedwarsqol$statsScale()) + 4;
         }
         return reserve;
+    }
+
+    /**
+     * Appends the recovered real name in gray after a denicked player's tab name — {@code Nick (Real)}.
+     * Injected into the vanilla name getter so the width math (which keys off {@link #getPlayerName})
+     * and the draw both use the extended name, keeping columns wide enough to avoid overlap. Gated by
+     * Nick Utils + Auto Denick; a no-op for players we haven't denicked (real == null).
+     */
+    @Inject(method = "getPlayerName", at = @At("RETURN"), cancellable = true)
+    private void bedwarsqol$appendRealName(NetworkPlayerInfo info, CallbackInfoReturnable<String> cir) {
+        ClientSettings cfg = BedwarsQol.config;
+        if (cfg == null || !cfg.nickUtils || !cfg.autoDenick) return;
+        if (info == null || info.getGameProfile() == null) return;
+        String name = info.getGameProfile().getName();
+        if (name == null) return;
+        String real = Denicks.realNameForNick(name);
+        if (real == null) return;
+        cir.setReturnValue(cir.getReturnValue() + " §7(" + real + ")");
     }
 
     /**

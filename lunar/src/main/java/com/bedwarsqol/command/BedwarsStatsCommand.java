@@ -2,6 +2,7 @@ package com.bedwarsqol.command;
 
 import com.mojang.authlib.GameProfile;
 import com.bedwarsqol.BedwarsQol;
+import com.bedwarsqol.feature.ModChat;
 import com.bedwarsqol.stats.BedwarsStats;
 import com.bedwarsqol.stats.MojangNameResolver;
 import com.bedwarsqol.stats.StatsCache;
@@ -10,20 +11,20 @@ import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.IChatComponent;
-import net.weavemc.api.command.Command;
 
-import java.util.Arrays;
 import java.util.Locale;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * {@code /bw [player]} — prints a player's BedWars stats card to chat. Ported to Weave's
- * {@link Command}: the command word + args arrive via {@link #execute(String[])} and all output goes
- * to the local client chat (there is no {@code ICommandSender} under Weave).
+ * Prints a player's BedWars stats card to local chat. No longer a command of its own — {@link
+ * BedwarsQolCommand} ({@code /bw}) is the single entry point and calls {@link #showStats(String[])}
+ * for {@code /bw <player>} and {@code /bw stats [player]} (no player defaults to yourself).
  */
-public class BedwarsStatsCommand extends Command {
+public final class BedwarsStatsCommand {
+
+    private BedwarsStatsCommand() {}
 
     private static final ExecutorService EXEC = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "BedwarsQol-BwCmd");
@@ -31,24 +32,17 @@ public class BedwarsStatsCommand extends Command {
         return t;
     });
 
-    public BedwarsStatsCommand() {
-        super("bw");
-    }
-
-    @Override
-    public void execute(String[] rawArgs) {
-        // Weave passes the full token list including the command word ("bw") as rawArgs[0]; drop it
-        // so this matches the Forge convention the body was written against (args after the command).
-        String[] args = rawArgs.length > 1 ? Arrays.copyOfRange(rawArgs, 1, rawArgs.length) : new String[0];
+    /** Fetch and print the stats card for {@code args[0]}, or the local player when {@code args} is empty. */
+    public static void showStats(String[] args) {
         if (BedwarsQol.config == null || !BedwarsQol.config.playerStats) {
-            sendChat("§cPlayer Stats is disabled. Enable it in /bedwarsqol.");
+            sendChat("§cPlayer Stats is disabled. Enable it in /bw.");
             return;
         }
 
         boolean backend = BedwarsQol.config.statsBackendUrl != null
                 && !BedwarsQol.config.statsBackendUrl.trim().isEmpty();
         if (!backend) {
-            sendChat("§cNo stats backend URL. Set §f/bedwarsqol statsurl <url>§c.");
+            sendChat("§cNo stats backend URL. Set §f/bw statsurl <url>§c.");
             return;
         }
 
@@ -187,7 +181,7 @@ public class BedwarsStatsCommand extends Command {
     private static void sendChat(String msg) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null || mc.thePlayer == null) return;
-        IChatComponent c = new ChatComponentText(msg);
+        IChatComponent c = ModChat.mark(new ChatComponentText(msg));
         mc.addScheduledTask(() -> mc.thePlayer.addChatMessage(c));
     }
 }

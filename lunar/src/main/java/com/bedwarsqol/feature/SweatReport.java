@@ -281,7 +281,7 @@ public final class SweatReport {
     }
 
     private static void local(Minecraft mc, String msg) {
-        if (mc.thePlayer != null) mc.thePlayer.addChatMessage(new ChatComponentText(msg));
+        if (mc.thePlayer != null) mc.thePlayer.addChatMessage(ModChat.mark(new ChatComponentText(msg)));
     }
 
     /** The first Minecraft color code in a player's rendered nametag = their team color. */

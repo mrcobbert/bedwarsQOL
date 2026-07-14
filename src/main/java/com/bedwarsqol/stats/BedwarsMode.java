@@ -1,5 +1,7 @@
 package com.bedwarsqol.stats;
 
+import java.util.Locale;
+
 /**
  * A Bedwars team format. {@link #UNKNOWN} covers the lobby, dream modes, 4v4, and any
  * layout we can't confidently map — callers fall back to overall stats for it.
@@ -41,5 +43,22 @@ public enum BedwarsMode {
             if (maxTeamSize == 4) return FOURS;
         }
         return UNKNOWN;
+    }
+
+    /**
+     * A forced display mode from a stored/typed token: {@code all}/{@code overall} &rarr; {@link #UNKNOWN}
+     * (overall), plus {@code solo}/{@code doubles}/{@code threes}/{@code fours}. Returns {@code null} for
+     * {@code "auto"} (and anything unrecognised), signalling the caller to fall back to live detection.
+     */
+    public static BedwarsMode fromToken(String token) {
+        if (token == null) return null;
+        switch (token.trim().toLowerCase(Locale.US)) {
+            case "all": case "overall": return UNKNOWN;
+            case "solo": return SOLO;
+            case "doubles": return DOUBLES;
+            case "threes": return THREES;
+            case "fours": return FOURS;
+            default: return null;
+        }
     }
 }

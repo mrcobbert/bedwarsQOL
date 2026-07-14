@@ -2,14 +2,13 @@ package com.bedwarsqol.command;
 
 import com.mojang.authlib.GameProfile;
 import com.bedwarsqol.BedwarsQol;
+import com.bedwarsqol.feature.ModChat;
 import com.bedwarsqol.stats.BedwarsStats;
 import com.bedwarsqol.stats.MojangNameResolver;
 import com.bedwarsqol.stats.StatsCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.client.network.NetworkPlayerInfo;
-import net.minecraft.command.CommandBase;
-import net.minecraft.command.ICommandSender;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.IChatComponent;
 
@@ -18,7 +17,14 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class BedwarsStatsCommand extends CommandBase {
+/**
+ * Prints a player's BedWars stats card to local chat. No longer a command of its own — {@link
+ * BedwarsQolCommand} ({@code /bw}) is the single entry point and calls {@link #showStats(String[])}
+ * for {@code /bw <player>} and {@code /bw stats [player]} (no player defaults to yourself).
+ */
+public final class BedwarsStatsCommand {
+
+    private BedwarsStatsCommand() {}
 
     private static final ExecutorService EXEC = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "BedwarsQol-BwCmd");
@@ -26,37 +32,17 @@ public class BedwarsStatsCommand extends CommandBase {
         return t;
     });
 
-    @Override
-    public String getCommandName() {
-        return "bw";
-    }
-
-    @Override
-    public String getCommandUsage(ICommandSender sender) {
-        return "/bw [player]";
-    }
-
-    @Override
-    public int getRequiredPermissionLevel() {
-        return 0;
-    }
-
-    @Override
-    public boolean canCommandSenderUseCommand(ICommandSender sender) {
-        return true;
-    }
-
-    @Override
-    public void processCommand(ICommandSender sender, String[] args) {
+    /** Fetch and print the stats card for {@code args[0]}, or the local player when {@code args} is empty. */
+    public static void showStats(String[] args) {
         if (BedwarsQol.config == null || !BedwarsQol.config.playerStats) {
-            sendTo(sender, "§cPlayer Stats is disabled. Enable it in /bedwarsqol.");
+            sendChat("§cPlayer Stats is disabled. Enable it in /bw.");
             return;
         }
 
         boolean backend = BedwarsQol.config.statsBackendUrl != null
                 && !BedwarsQol.config.statsBackendUrl.trim().isEmpty();
         if (!backend) {
-            sendTo(sender, "§cNo stats backend URL. Set §f/bedwarsqol statsurl <url>§c.");
+            sendChat("§cNo stats backend URL. Set §f/bw statsurl <url>§c.");
             return;
         }
 
@@ -64,7 +50,7 @@ public class BedwarsStatsCommand extends CommandBase {
                 ? args[0]
                 : Minecraft.getMinecraft().getSession().getUsername();
 
-        sendTo(sender, "§7Fetching Bedwars stats for §f" + name + "§7...");
+        sendChat("§7Fetching Bedwars stats for §f" + name + "§7...");
         EXEC.submit(() -> {
             try {
                 UUID uuid = resolveUuid(name);
@@ -195,11 +181,7 @@ public class BedwarsStatsCommand extends CommandBase {
     private static void sendChat(String msg) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null || mc.thePlayer == null) return;
-        IChatComponent c = new ChatComponentText(msg);
+        IChatComponent c = ModChat.mark(new ChatComponentText(msg));
         mc.addScheduledTask(() -> mc.thePlayer.addChatMessage(c));
-    }
-
-    private static void sendTo(ICommandSender sender, String msg) {
-        sender.addChatMessage(new ChatComponentText(msg));
     }
 }

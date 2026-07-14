@@ -2,6 +2,8 @@ package com.bedwarsqol.config;
 
 import org.lwjgl.input.Keyboard;
 
+import java.util.Locale;
+
 public class ClientSettings {
 
     public int defaultTextSize = 1;
@@ -30,13 +32,6 @@ public class ClientSettings {
     public int armorHudY = 34;
     public int armorHudAnchor = 0;
     public float armorHudScale = 1.0f;
-
-    public boolean infoEnabled = false;
-    public int infoHudX = 5;
-    public int infoHudY = 58;
-    public int infoHudAnchor = 0;
-    public float infoHudScale = 1.0f;
-    public boolean infoBackgroundEnabled = false;
 
     // --- BedWars HUDs (only render in an active BedWars game) ---
 
@@ -77,6 +72,14 @@ public class ClientSettings {
     public boolean playerStatsShowRank = true;
     /** Hovering a player's name in chat appends their BedWars stats to the hover card (lobby/queue/game). */
     public boolean playerStatsChatHover = true;
+    /** Chat Stats: prepend the sender's FKDR (or [New] for a never-played account) to their chat lines. */
+    public boolean playerStatsChat = true;
+    /**
+     * Which gamemode's FKDR the in-chat Chat Stats bracket shows. {@code "auto"} follows the detected
+     * game mode (overall in the lobby); the fixed values {@code overall}/{@code solo}/{@code doubles}/
+     * {@code threes}/{@code fours} always show that mode. Set with {@code /bw mode <...>}.
+     */
+    public String chatStatsMode = "auto";
     /** When in an active Bedwars game, broadcast the sweatiest enemy teams to party chat once. */
     public boolean statsSweatReport = false;
 
@@ -85,6 +88,50 @@ public class ClientSettings {
 
     /** Party Join Alert: red "Party Joined" in chat when a premade team queues a 2s/3s/4s game. */
     public boolean partyJoinAlert = false;
+
+    /**
+     * Chat Heads: draw a small player head immediately left of the sender's name on chat lines, using
+     * the skin the client already shows for that player (nicks keep the nick skin). Works on any server.
+     * Off by default. Draws only for senders present in the tab list (see
+     * {@link com.bedwarsqol.feature.ChatPlayerHeads}).
+     */
+    public boolean chatPlayerHeads = false;
+
+    /**
+     * Cheater Detector: master toggle for the passive observer-side checks (see
+     * {@link com.bedwarsqol.anticheat.CheaterDetector}). Off by default. Output is a private local
+     * chat flag only — boolean verdicts, never other players' numbers, never automated actions.
+     */
+    public boolean anticheat = false;
+    /** Anti-Knockback: broadcast S12 impulse vs the victim's realized displacement. */
+    public boolean acAntiKb = true;
+    /** Kill Aura: melee hits landed through solid walls (lag-compensated look-ray). */
+    public boolean acThroughWall = true;
+    /** Autoblock: swinging while the sword-block flag has been held continuously. */
+    public boolean acAutoblock = true;
+    /** Kill Aura: landing melee hits mid-eat/drink. */
+    public boolean acEating = true;
+    /** No Slowdown: sprint + use-item metadata flags concurrent at sprint speed. */
+    public boolean acNoSlow = true;
+
+    /**
+     * Nick Utils: master toggle for the nicked-player module. Detects Hypixel-nicked players entirely
+     * client-side (see {@link com.bedwarsqol.feature.NickUtils}). Off by default.
+     */
+    public boolean nickUtils = false;
+
+    /**
+     * Nick Notify (sub-setting of {@link #nickUtils}): print "&lt;name&gt; is Nicked" once per nicked
+     * player in the lobby/queue or game. On by default once Nick Utils is enabled.
+     */
+    public boolean nickNotify = true;
+
+    /**
+     * Auto Denick (sub-setting of {@link #nickUtils}): when a nick kept their own skin, decode the
+     * Mojang-signed skin to reveal the real account and append "Real Name: &lt;realName&gt;". On by
+     * default once Nick Utils is enabled.
+     */
+    public boolean autoDenick = true;
 
     // Stats come from a Cloudflare Worker that each user self-hosts (see server/stats-worker). No
     // public backend is shipped — never commit a real URL or token here. Users set their own via
@@ -155,8 +202,6 @@ public class ClientSettings {
         armorHudAnchor = clamp(armorHudAnchor, 0, 8);
         if (potionHudScale < 0.3f || potionHudScale > 10.0f) potionHudScale = defaultTextSizeScale();
         if (armorHudScale < 0.3f || armorHudScale > 10.0f) armorHudScale = defaultTextSizeScale();
-        infoHudAnchor = clamp(infoHudAnchor, 0, 8);
-        if (infoHudScale < 0.3f || infoHudScale > 10.0f) infoHudScale = defaultTextSizeScale();
 
         inventoryHudAnchor = clamp(inventoryHudAnchor, 0, 8);
         if (inventoryHudScale < 0.3f || inventoryHudScale > 10.0f) inventoryHudScale = defaultTextSizeScale();
@@ -177,12 +222,27 @@ public class ClientSettings {
         handPosZ = clampf(handPosZ, -1.0f, 1.0f);
         handScale = clampf(handScale, 0.5f, 2.0f);
 
+        chatStatsMode = normalizeChatStatsMode(chatStatsMode);
+
         if (statsBackendUrl == null) statsBackendUrl = "";
         statsBackendUrl = statsBackendUrl.trim();
         if (statsBackendToken == null) statsBackendToken = "";
         statsBackendToken = statsBackendToken.trim();
         if (settingsKeyCode < 0) settingsKeyCode = Keyboard.KEY_RSHIFT;
         if (dummySpawnKeyCode < 0) dummySpawnKeyCode = Keyboard.KEY_NONE;
+    }
+
+    /** Coerce {@link #chatStatsMode} to a known token, defaulting anything unrecognised to "auto". */
+    private static String normalizeChatStatsMode(String mode) {
+        if (mode == null) return "auto";
+        switch (mode.trim().toLowerCase(Locale.US)) {
+            case "overall": return "overall";
+            case "solo": return "solo";
+            case "doubles": return "doubles";
+            case "threes": return "threes";
+            case "fours": return "fours";
+            default: return "auto";
+        }
     }
 
     public float defaultTextSizeScale() {
@@ -197,7 +257,6 @@ public class ClientSettings {
         float scale = defaultTextSizeScale();
         potionHudScale = scale;
         armorHudScale = scale;
-        infoHudScale = scale;
         inventoryHudScale = scale;
         diamondTimerHudScale = scale;
         emeraldTimerHudScale = scale;

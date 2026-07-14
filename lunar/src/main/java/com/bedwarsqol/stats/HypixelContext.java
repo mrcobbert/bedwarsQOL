@@ -21,7 +21,26 @@ public final class HypixelContext {
         return ip.endsWith("hypixel.net") || ip.equals("mc.hypixel.net") || ip.contains("hypixel");
     }
 
+    /** How long a confirmed Bedwars context outlives the raw sidebar check (see {@link #isInBedwars}). */
+    private static final long CONTEXT_GRACE_MS = 2000L;
+    private static volatile long lastInBedwarsMs;
+
+    /**
+     * Whether the sidebar says we're anywhere in Bedwars, held last-known-good for a short grace.
+     * Hypixel rebuilds the sidebar objective whenever it updates — often triggered by the very lobby
+     * join that also fires a chat broadcast — so a packet processed inside the remove→re-add window
+     * sees no slot-1 objective at all. Receive-time consumers (ChatNameTags) drop a line rejected in
+     * that window permanently; the grace keeps the context true across the rebuild.
+     */
     public static boolean isInBedwars() {
+        if (rawIsInBedwars()) {
+            lastInBedwarsMs = System.currentTimeMillis();
+            return true;
+        }
+        return System.currentTimeMillis() - lastInBedwarsMs < CONTEXT_GRACE_MS;
+    }
+
+    private static boolean rawIsInBedwars() {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc == null || mc.theWorld == null) return false;
         Scoreboard board = mc.theWorld.getScoreboard();
@@ -41,6 +60,23 @@ public final class HypixelContext {
         Scoreboard board = mc.theWorld.getScoreboard();
         if (board == null) return false;
         return board.getObjectiveInDisplaySlot(2) != null;
+    }
+
+    /**
+     * Whether the sidebar objective is a Duels game (title contains "DUELS"). Unlike the Bedwars check
+     * this doesn't require a second objective, so it's true in the Duels lobby too — harmless, since the
+     * lobby has no combat to judge; combat only happens once a match starts. Used to let the cheater
+     * detector run in duels, where a 1v1 puts the opponent right on you (ideal for it).
+     */
+    public static boolean isInDuels() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc == null || mc.theWorld == null) return false;
+        Scoreboard board = mc.theWorld.getScoreboard();
+        if (board == null) return false;
+        ScoreObjective objective = board.getObjectiveInDisplaySlot(1);
+        if (objective == null) return false;
+        String title = stripFormatting(objective.getDisplayName());
+        return title != null && title.toUpperCase().contains("DUELS");
     }
 
     private static String stripFormatting(String s) {

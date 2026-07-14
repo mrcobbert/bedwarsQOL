@@ -319,7 +319,6 @@ public class EditHudGui extends GuiScreen {
 
     private static float getHudScale(ClientSettings cfg, String id) {
         if (BedwarsHudRenderer.ARMOR_HUD.equals(id)) return cfg.armorHudScale;
-        if (BedwarsHudRenderer.INFO_HUD.equals(id)) return cfg.infoHudScale;
         if (BedwarsHudRenderer.INVENTORY_HUD.equals(id)) return cfg.inventoryHudScale;
         if (BedwarsHudRenderer.DIAMOND_TIMER_HUD.equals(id)) return cfg.diamondTimerHudScale;
         if (BedwarsHudRenderer.EMERALD_TIMER_HUD.equals(id)) return cfg.emeraldTimerHudScale;
@@ -332,8 +331,6 @@ public class EditHudGui extends GuiScreen {
             cfg.potionHudScale = scale;
         } else if (BedwarsHudRenderer.ARMOR_HUD.equals(id)) {
             cfg.armorHudScale = scale;
-        } else if (BedwarsHudRenderer.INFO_HUD.equals(id)) {
-            cfg.infoHudScale = scale;
         } else if (BedwarsHudRenderer.INVENTORY_HUD.equals(id)) {
             cfg.inventoryHudScale = scale;
         } else if (BedwarsHudRenderer.DIAMOND_TIMER_HUD.equals(id)) {

@@ -10,10 +10,12 @@
     "MinecraftEscMixin",
     "GuiPlayerTabOverlayMixin",
     "GuiChatMixin",
+    "FontRendererMixin",
     "GuiScreenMixin",
-    "NetHandlerPlayClientMixin",
     "ItemRendererMixin",
-    "RenderGlobalMixin"
+    "RenderGlobalMixin",
+    "NetHandlerPlayClientMixin",
+    "PlayerControllerMPMixin"
   ],
   "verbose": true
 }

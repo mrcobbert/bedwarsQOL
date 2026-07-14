@@ -87,6 +87,9 @@ repositories {
 
 // Configures the libraries/dependencies for your mod.
 dependencies {
+    // JUnit 4 for the pure, Minecraft-free ChatHeadGrammar tests (see src/test). Java 8 compatible.
+    testImplementation("junit:junit:4.13.2")
+
     // Adds DevAuth, which we can use to log in to Minecraft in development.
     modRuntimeOnly("me.djtheredstoner:DevAuth-${if (platform.isFabric) "fabric" else if (platform.isLegacyForge) "forge-legacy" else "forge-latest"}:1.2.0")
 

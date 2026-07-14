@@ -30,7 +30,7 @@ import java.util.List;
 public class SettingsGui extends GuiScreen {
 
     // control kinds
-    private static final int K_POTION = 1, K_ARMOR = 2, K_INFO = 3,
+    private static final int K_POTION = 1, K_ARMOR = 2,
             K_INVENTORY = 5, K_GENTIMERS = 6, K_STATS = 7, K_LEVEL = 8, K_RANK = 9,
             K_NAMETAG = 10, K_TAB = 11, K_KEYSTROKES = 12, K_HANDPOS = 13, K_HANDSCALE = 14,
             K_BLOCKOVERLAY = 15, K_SEETHROUGH = 16, K_HANDX = 17, K_HANDY = 18,
@@ -42,7 +42,7 @@ public class SettingsGui extends GuiScreen {
     private static final int K_TAB_PING = 52;
     private static final int K_CHATHOVER = 53;
     // Per-module "Background" sub-toggles (draw a panel behind the HUD element).
-    private static final int K_POTION_BG = 60, K_INFO_BG = 62,
+    private static final int K_POTION_BG = 60,
             K_INVENTORY_BG = 63, K_GENTIMERS_BG = 64;
     // HUD text font: modern (Inter) vs vanilla Minecraft.
     private static final int K_HUDFONT = 66;
@@ -50,6 +50,20 @@ public class SettingsGui extends GuiScreen {
     private static final int K_AUTOGG = 67;
     // Party Join Alert: red "Party Joined" when a premade team queues a 2s/3s/4s game.
     private static final int K_PARTYJOIN = 68;
+    // Chat Heads: player head left of the sender's name in chat (any server, default off).
+    private static final int K_CHATHEADS = 83;
+    // Nick Utils module (master toggle) + its sub-settings.
+    private static final int K_NICKUTILS = 73;
+    private static final int K_NICK_NOTIFY = 74;
+    private static final int K_AUTO_DENICK = 75;
+    private static final int K_CHATSTATS = 76;
+    // Cheater Detector module (master toggle) + its per-check sub-settings.
+    private static final int K_ANTICHEAT = 77;
+    private static final int K_AC_ANTIKB = 78;
+    private static final int K_AC_WALL = 79;
+    private static final int K_AC_AUTOBLOCK = 80;
+    private static final int K_AC_EAT = 81;
+    private static final int K_AC_NOSLOW = 82;
     private static final int K_SCOREBOARD_SIZE = 46, K_STYLEDTAB_SIZE = 47;
     private static final int K_SUPPRESSESC = 48;
     private static final int K_DUMMY = 49, K_DUMMY_KEY = 50, K_DUMMY_CLEAR = 51;
@@ -144,8 +158,6 @@ public class SettingsGui extends GuiScreen {
                     new RowDef(RowType.TOGGLE, "Background", K_POTION_BG, null, K_POTION),
                     new RowDef(RowType.TOGGLE, "Armor", "Equipped armor type", K_ARMOR),
                     new RowDef(RowType.TOGGLE, "In Game Only", K_ARMOR_INGAME, null, K_ARMOR),
-                    new RowDef(RowType.TOGGLE, "Info", "FPS, CPS, TPS, ping", K_INFO),
-                    new RowDef(RowType.TOGGLE, "Background", K_INFO_BG, null, K_INFO),
                     new RowDef(RowType.TOGGLE, "Inventory", "Stored items at a glance", K_INVENTORY),
                     new RowDef(RowType.TOGGLE, "In Game Only", K_INVENTORY_INGAME, null, K_INVENTORY),
                     new RowDef(RowType.TOGGLE, "Background", K_INVENTORY_BG, null, K_INVENTORY),
@@ -169,17 +181,28 @@ public class SettingsGui extends GuiScreen {
                     new RowDef(RowType.STEPPER, "Color", K_OVERLAYCOLOR, OVERLAY_COLORS, K_BLOCKOVERLAY),
                     new RowDef(RowType.STEPPER, "Opacity", K_OVERLAYOPACITY, OVERLAY_OPACITIES, K_BLOCKOVERLAY),
                     new RowDef(RowType.TOGGLE, "Hide Tab Header/Footer", "Hide tab header and footer", K_TAB_HEADERFOOTER),
-                    new RowDef(RowType.TOGGLE, "Tab Numeric Ping", "Show ping as a number", K_TAB_PING)),
+                    new RowDef(RowType.TOGGLE, "Tab Numeric Ping", "Show ping as a number", K_TAB_PING),
+                    new RowDef(RowType.TOGGLE, "Chat Heads", "Player head left of chat names", K_CHATHEADS)),
             new Section("Hypixel", true,
                     new RowDef(RowType.TOGGLE, "Hypixel Stats", "BedWars stats on screen", K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Nametag", K_NAMETAG, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Tab", K_TAB, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Chat Hover", K_CHATHOVER, null, K_STATS),
+                    new RowDef(RowType.TOGGLE, "Chat Stats", K_CHATSTATS, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Level", K_LEVEL, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Show Rank", K_RANK, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Party Report", K_SWEATREPORT, null, K_STATS),
                     new RowDef(RowType.TOGGLE, "Auto GG", "Say gg when a game ends", K_AUTOGG),
-                    new RowDef(RowType.TOGGLE, "Party Join Alert", "Red 'Party Joined' when a party queues", K_PARTYJOIN)),
+                    new RowDef(RowType.TOGGLE, "Party Join Alert", "Red 'Party Joined' when a party queues", K_PARTYJOIN),
+                    new RowDef(RowType.TOGGLE, "Nick Utils", "Detect and denick nicked players", K_NICKUTILS),
+                    new RowDef(RowType.TOGGLE, "Nick Notify", K_NICK_NOTIFY, null, K_NICKUTILS),
+                    new RowDef(RowType.TOGGLE, "Auto Denick", K_AUTO_DENICK, null, K_NICKUTILS),
+                    new RowDef(RowType.TOGGLE, "Cheater Detector", "Privately flag suspicious players", K_ANTICHEAT),
+                    new RowDef(RowType.TOGGLE, "Anti-Knockback", K_AC_ANTIKB, null, K_ANTICHEAT),
+                    new RowDef(RowType.TOGGLE, "Hits Through Walls", K_AC_WALL, null, K_ANTICHEAT),
+                    new RowDef(RowType.TOGGLE, "Autoblock", K_AC_AUTOBLOCK, null, K_ANTICHEAT),
+                    new RowDef(RowType.TOGGLE, "Attack While Eating", K_AC_EAT, null, K_ANTICHEAT),
+                    new RowDef(RowType.TOGGLE, "No Slowdown", K_AC_NOSLOW, null, K_ANTICHEAT)),
             new Section("Settings",
                     new RowDef(RowType.STEPPER, "GUI Size", K_GUISIZE, GUI_SIZES),
                     new RowDef(RowType.STEPPER, "HUD Size", K_HUDSIZE, TEXT_SIZES),
@@ -1846,27 +1869,36 @@ public class SettingsGui extends GuiScreen {
         switch (kind) {
             case K_POTION: return cfg.potionStatusEnabled;
             case K_ARMOR: return cfg.armorTypeEnabled;
-            case K_INFO: return cfg.infoEnabled;
             case K_INVENTORY: return cfg.inventoryHudEnabled;
             case K_GENTIMERS: return cfg.genTimersEnabled;
             case K_STATS: return cfg.playerStats;
             case K_NAMETAG: return cfg.playerStatsNametag;
             case K_TAB: return cfg.playerStatsTab;
             case K_CHATHOVER: return cfg.playerStatsChatHover;
+            case K_CHATSTATS: return cfg.playerStatsChat;
             case K_LEVEL: return cfg.playerStatsShowLevel;
             case K_RANK: return cfg.playerStatsShowRank;
             case K_SWEATREPORT: return cfg.statsSweatReport;
             case K_AUTOGG: return cfg.autoGg;
             case K_PARTYJOIN: return cfg.partyJoinAlert;
+            case K_NICKUTILS: return cfg.nickUtils;
+            case K_NICK_NOTIFY: return cfg.nickNotify;
+            case K_AUTO_DENICK: return cfg.autoDenick;
+            case K_ANTICHEAT: return cfg.anticheat;
+            case K_AC_ANTIKB: return cfg.acAntiKb;
+            case K_AC_WALL: return cfg.acThroughWall;
+            case K_AC_AUTOBLOCK: return cfg.acAutoblock;
+            case K_AC_EAT: return cfg.acEating;
+            case K_AC_NOSLOW: return cfg.acNoSlow;
             case K_TAB_HEADERFOOTER: return cfg.tabHideHeaderFooter;
             case K_TAB_PING: return cfg.tabNumericPing;
+            case K_CHATHEADS: return cfg.chatPlayerHeads;
             case K_KEYSTROKES: return cfg.keystrokesEnabled;
             case K_POTION_INGAME: return cfg.potionInGameOnly;
             case K_ARMOR_INGAME: return cfg.armorInGameOnly;
             case K_INVENTORY_INGAME: return cfg.inventoryInGameOnly;
             case K_KEYSTROKES_INGAME: return cfg.keystrokesInGameOnly;
             case K_POTION_BG: return cfg.potionBackgroundEnabled;
-            case K_INFO_BG: return cfg.infoBackgroundEnabled;
             case K_INVENTORY_BG: return cfg.inventoryBackgroundEnabled;
             case K_GENTIMERS_BG: return cfg.genTimersBackgroundEnabled;
             case K_BLOCKOVERLAY: return cfg.blockOverlayEnabled;
@@ -1883,27 +1915,39 @@ public class SettingsGui extends GuiScreen {
         switch (kind) {
             case K_POTION: cfg.potionStatusEnabled = !cfg.potionStatusEnabled; break;
             case K_ARMOR: cfg.armorTypeEnabled = !cfg.armorTypeEnabled; break;
-            case K_INFO: cfg.infoEnabled = !cfg.infoEnabled; break;
             case K_INVENTORY: cfg.inventoryHudEnabled = !cfg.inventoryHudEnabled; break;
             case K_GENTIMERS: cfg.genTimersEnabled = !cfg.genTimersEnabled; break;
             case K_STATS: cfg.playerStats = !cfg.playerStats; break;
             case K_NAMETAG: cfg.playerStatsNametag = !cfg.playerStatsNametag; break;
             case K_TAB: cfg.playerStatsTab = !cfg.playerStatsTab; break;
             case K_CHATHOVER: cfg.playerStatsChatHover = !cfg.playerStatsChatHover; break;
+            case K_CHATSTATS: cfg.playerStatsChat = !cfg.playerStatsChat; break;
             case K_LEVEL: cfg.playerStatsShowLevel = !cfg.playerStatsShowLevel; break;
             case K_RANK: cfg.playerStatsShowRank = !cfg.playerStatsShowRank; break;
             case K_SWEATREPORT: cfg.statsSweatReport = !cfg.statsSweatReport; break;
             case K_AUTOGG: cfg.autoGg = !cfg.autoGg; break;
             case K_PARTYJOIN: cfg.partyJoinAlert = !cfg.partyJoinAlert; break;
+            case K_NICKUTILS: cfg.nickUtils = !cfg.nickUtils; break;
+            case K_NICK_NOTIFY: cfg.nickNotify = !cfg.nickNotify; break;
+            case K_AUTO_DENICK: cfg.autoDenick = !cfg.autoDenick; break;
+            case K_ANTICHEAT: cfg.anticheat = !cfg.anticheat; break;
+            case K_AC_ANTIKB: cfg.acAntiKb = !cfg.acAntiKb; break;
+            case K_AC_WALL: cfg.acThroughWall = !cfg.acThroughWall; break;
+            case K_AC_AUTOBLOCK: cfg.acAutoblock = !cfg.acAutoblock; break;
+            case K_AC_EAT: cfg.acEating = !cfg.acEating; break;
+            case K_AC_NOSLOW: cfg.acNoSlow = !cfg.acNoSlow; break;
             case K_TAB_HEADERFOOTER: cfg.tabHideHeaderFooter = !cfg.tabHideHeaderFooter; break;
             case K_TAB_PING: cfg.tabNumericPing = !cfg.tabNumericPing; break;
+            case K_CHATHEADS:
+                cfg.chatPlayerHeads = !cfg.chatPlayerHeads;
+                com.bedwarsqol.feature.ChatPlayerHeads.onToggle();
+                break;
             case K_KEYSTROKES: cfg.keystrokesEnabled = !cfg.keystrokesEnabled; break;
             case K_POTION_INGAME: cfg.potionInGameOnly = !cfg.potionInGameOnly; break;
             case K_ARMOR_INGAME: cfg.armorInGameOnly = !cfg.armorInGameOnly; break;
             case K_INVENTORY_INGAME: cfg.inventoryInGameOnly = !cfg.inventoryInGameOnly; break;
             case K_KEYSTROKES_INGAME: cfg.keystrokesInGameOnly = !cfg.keystrokesInGameOnly; break;
             case K_POTION_BG: cfg.potionBackgroundEnabled = !cfg.potionBackgroundEnabled; break;
-            case K_INFO_BG: cfg.infoBackgroundEnabled = !cfg.infoBackgroundEnabled; break;
             case K_INVENTORY_BG: cfg.inventoryBackgroundEnabled = !cfg.inventoryBackgroundEnabled; break;
             case K_GENTIMERS_BG: cfg.genTimersBackgroundEnabled = !cfg.genTimersBackgroundEnabled; break;
             case K_BLOCKOVERLAY: cfg.blockOverlayEnabled = !cfg.blockOverlayEnabled; break;

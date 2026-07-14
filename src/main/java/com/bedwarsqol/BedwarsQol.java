@@ -1,18 +1,19 @@
 package com.bedwarsqol;
 
+import com.bedwarsqol.anticheat.CheaterDetector;
 import com.bedwarsqol.bedwars.GeneratorTracker;
-import com.bedwarsqol.command.BedwarsStatsCommand;
 import com.bedwarsqol.command.BedwarsQolCommand;
 import com.bedwarsqol.config.ClientSettings;
 import com.bedwarsqol.config.SettingsManager;
 import com.bedwarsqol.feature.AutoGg;
 import com.bedwarsqol.feature.BlockOverlayRenderer;
-import com.bedwarsqol.feature.ClickTracker;
+import com.bedwarsqol.feature.ChatNameTags;
+import com.bedwarsqol.feature.DiagLog;
 import com.bedwarsqol.feature.TntFuseDisplay;
 import com.bedwarsqol.feature.NametagStats;
+import com.bedwarsqol.feature.NickUtils;
 import com.bedwarsqol.feature.PartyJoinAlert;
 import com.bedwarsqol.feature.PauseKeyHandler;
-import com.bedwarsqol.feature.PingTracker;
 import com.bedwarsqol.feature.SettingsKeyHandler;
 import com.bedwarsqol.feature.SweatReport;
 import com.bedwarsqol.feature.dummy.TestDummyHandler;
@@ -49,11 +50,12 @@ public class BedwarsQol {
     @Mod.EventHandler
     public void onInit(FMLInitializationEvent event) {
         config = SettingsManager.load();
+        DiagLog.init("BedwarsQOL v" + VERSION + " (forge)");
+        CheaterDetector.logStartup();
         settingsKeyBinding = new KeyBinding("Open BedwarsQOL Settings", config.settingsKeyCode, "BedwarsQOL");
         ClientRegistry.registerKeyBinding(settingsKeyBinding);
         pauseKeyBinding = new KeyBinding("Open Game Menu", Keyboard.KEY_NONE, "BedwarsQOL");
         ClientRegistry.registerKeyBinding(pauseKeyBinding);
-        ClientCommandHandler.instance.registerCommand(new BedwarsStatsCommand());
         ClientCommandHandler.instance.registerCommand(new BedwarsQolCommand());
         MinecraftForge.EVENT_BUS.register(new SettingsKeyHandler(settingsKeyBinding));
         MinecraftForge.EVENT_BUS.register(new PauseKeyHandler(pauseKeyBinding));
@@ -63,11 +65,12 @@ public class BedwarsQol {
         MinecraftForge.EVENT_BUS.register(new SweatReport());
         MinecraftForge.EVENT_BUS.register(new AutoGg());
         MinecraftForge.EVENT_BUS.register(new PartyJoinAlert());
+        MinecraftForge.EVENT_BUS.register(new NickUtils());
+        MinecraftForge.EVENT_BUS.register(new ChatNameTags());
         MinecraftForge.EVENT_BUS.register(new GeneratorTracker());
-        MinecraftForge.EVENT_BUS.register(new PingTracker());
-        MinecraftForge.EVENT_BUS.register(new ClickTracker());
         MinecraftForge.EVENT_BUS.register(new BlockOverlayRenderer());
         MinecraftForge.EVENT_BUS.register(new TntFuseDisplay());
+        MinecraftForge.EVENT_BUS.register(CheaterDetector.get());
         MinecraftForge.EVENT_BUS.register(new TestDummyHandler());
 
         // Debug "Test Dummy": one mod entity, rendered as a player. Spawned on the integrated server in
