@@ -8,6 +8,8 @@
   },
   "client": [
     "GuiIngameMixin",
+    "GuiNewChatMixin",
+    "MinecraftChatClearMixin",
     "MinecraftEscMixin",
     "GuiPlayerTabOverlayMixin",
     "GuiChatMixin",

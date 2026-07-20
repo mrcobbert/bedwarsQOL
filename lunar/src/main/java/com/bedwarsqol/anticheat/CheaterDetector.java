@@ -26,6 +26,7 @@ import net.weavemc.api.event.WorldEvent;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Cheater Detector: flags OTHER players whose observed behaviour is impossible for a vanilla client.
@@ -94,6 +95,10 @@ public final class CheaterDetector {
 
     private final Map<Integer, PlayerData> players = new HashMap<Integer, PlayerData>();
     private final Map<Long, Integer> recentBlocks = new HashMap<Long, Integer>();
+    /** Lowercase names flagged by any check this session; read by the Urchin fusion surface. Cleared
+     *  in {@link #reset()} (per-game), so a stale flag can never fuse across games. */
+    private final Set<String> flaggedNames = java.util.Collections.newSetFromMap(
+            new java.util.concurrent.ConcurrentHashMap<String, Boolean>());
     private int tick;
 
     // Liveness telemetry (written to the diag log every 30s while active + on teardown). Proves the
@@ -714,9 +719,15 @@ public final class CheaterDetector {
         }
     }
 
+    /** Whether {@code name} has any live Cheater Detector flag this session (Urchin fusion input). */
+    public boolean hasLiveFlags(String name) {
+        return name != null && flaggedNames.contains(name.toLowerCase());
+    }
+
     private void reset() {
         players.clear();
         recentBlocks.clear();
+        flaggedNames.clear();
         hbAttributed = 0;
         java.util.Arrays.fill(hbAccrual, 0);
         hbSwings = hbSwordSwing = hbBlkSwing = hbMaxUse = hbMeta = hbKbArm = hbKbEval = hbKbDbg = 0;
@@ -782,6 +793,7 @@ public final class CheaterDetector {
         if (tick - d.lastFlagTick[check] < FLAG_COOLDOWN || d.flagCount[check] >= FLAG_LIMIT) return;
         d.lastFlagTick[check] = tick;
         d.flagCount[check]++;
+        if (p.getName() != null) flaggedNames.add(p.getName().toLowerCase());
         announce(p, check, d.flagCount[check], detail);
         DiagLog.log("[AC] " + p.getName() + " flagged " + CHECK_LABEL[check] + " | " + detail);
     }

@@ -13,6 +13,7 @@ import { parseBedwarsFromHtml } from "./bedwars-parse.js";
 import { parseProfile } from "./profile-parse.js";
 import { readCached, writeCached, readStar } from "./cache.js";
 import { scrapeStarForPool } from "./star.js";
+import { tagsForUuids, resultFields } from "./urchin.js";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -214,13 +215,37 @@ function dedupeValidate(names) {
  * second and an all-cold lobby fills in progressively instead of blocking on the slowest player.
  * Each line carries a "name" field (the requested name) so the client can map it back.
  */
-export function streamBedwarsBatch(names, env, ctx) {
+export function streamBedwarsBatch(names, env, ctx, urchinCtx) {
   const valid = dedupeValidate(names);
   const { readable, writable } = new TransformStream();
   const writer = writable.getWriter();
   const enc = new TextEncoder();
   const writeLine = (name, body) =>
     writer.write(enc.encode(JSON.stringify({ name, ...body }) + "\n"));
+
+  // Urchin tags resolve in parallel with the counter stream (one Coral batch for the
+  // eligible uuids); results attach inline when already settled, otherwise as
+  // "urchinUpdate" follow-up lines AFTER the counter pass so a follow-up can never
+  // precede its base line. Errors -> no lines (silent degradation).
+  const urchinPromise =
+    urchinCtx && urchinCtx.uuidByName && urchinCtx.uuidByName.size > 0 && !urchinCtx.unavailableOnly
+      ? tagsForUuids([...urchinCtx.uuidByName.values()], env, ctx).catch(() => new Map())
+      : null;
+  let urchinResults = null;
+  if (urchinPromise) {
+    urchinPromise.then((m) => { urchinResults = m; });
+    // Guarantee the lookup (and its cache writes) completes even if the stream finishes
+    // first - the 3 s race below may abandon it, but the Worker lifecycle must not.
+    ctx.waitUntil(urchinPromise.then(() => {}));
+  }
+  const urchinFieldsFor = (name) => {
+    if (!urchinResults || !urchinCtx) return null;
+    const uuid = urchinCtx.uuidByName.get(name.toLowerCase());
+    if (!uuid) return null;
+    const f = resultFields(urchinResults.get(uuid), uuid);
+    // urchinUuid alone (no metadata) is meaningless - require actual resolution fields.
+    return Object.keys(f).length > 1 || (Object.keys(f).length === 1 && !f.urchinUuid) ? f : null;
+  };
 
   ctx.waitUntil(
     (async () => {
@@ -229,11 +254,20 @@ export function streamBedwarsBatch(names, env, ctx) {
         const needStar = [];
         // Emit one counter line, overlaying the star if it's already cached (warm = instant). A cold
         // star is recorded for the star pass instead of blocking the counter line.
+        // Names whose urchin result was NOT ready at base-line time (follow-up pass).
+        const needUrchin = [];
         const emitWithStar = async (name, body) => {
           if (body && body.success === true) {
             const s = await readStar(name, env, ctx);
             if (s != null) body.bedwarsLevel = s;
             else needStar.push(name);
+          }
+          if (urchinCtx && urchinCtx.unavailableOnly && urchinCtx.uuidByName.has(name.toLowerCase())) {
+            body.urchinUnavailable = true; // no KV -> zero Coral calls, resolved unavailable
+          } else if (urchinPromise && urchinCtx.uuidByName.has(name.toLowerCase())) {
+            const f = urchinFieldsFor(name);
+            if (f) Object.assign(body, f);
+            else needUrchin.push(name);
           }
           await writeLine(name, body);
         };
@@ -265,6 +299,17 @@ export function streamBedwarsBatch(names, env, ctx) {
             }
           }
         );
+        // 4) Urchin follow-ups: every base line has been emitted, so an urchinUpdate can
+        //    never precede its base. Wait up to 3 s for the Coral batch; a timed-out
+        //    lookup still caches (its promise was launched under ctx.waitUntil-covered
+        //    work above), just without follow-up lines this request.
+        if (urchinPromise && needUrchin.length > 0) {
+          await Promise.race([urchinPromise, sleep(3000)]);
+          for (const name of needUrchin) {
+            const f = urchinFieldsFor(name);
+            if (f) await writeLine(name, { success: true, urchinUpdate: true, ...f });
+          }
+        }
       } catch (e) {
         try { await writeLine("", { success: false, state: "ERROR", error: String(e && e.message ? e.message : e) }); } catch (_) {}
       } finally {

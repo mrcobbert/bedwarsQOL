@@ -5,7 +5,9 @@ import com.bedwarsqol.config.ClientSettings;
 import com.bedwarsqol.stats.BedwarsMode;
 import com.bedwarsqol.stats.BedwarsModeDetector;
 import com.bedwarsqol.stats.BedwarsStats;
+import com.bedwarsqol.stats.GameSessionTracker;
 import com.bedwarsqol.stats.HypixelContext;
+import com.bedwarsqol.stats.IdentitySnapshot;
 import com.bedwarsqol.stats.StatsCache;
 import com.mojang.authlib.GameProfile;
 import net.minecraft.client.Minecraft;
@@ -75,6 +77,30 @@ public final class NickUtils {
     /** Real Minecraft username shape — skips Hypixel's fake tab rows (team headers, info lines). */
     private static final Pattern MC_NAME = Pattern.compile("[A-Za-z0-9_]{3,16}");
 
+    // Immutable identity publication consumed by all Urchin transport/surfaces (both trees). A clean
+    // scan replaces it; a tripped/empty scan, lost context, or a session transition publishes EMPTY.
+    private static volatile IdentitySnapshot identitySnapshot = IdentitySnapshot.EMPTY;
+    private static final java.util.concurrent.atomic.AtomicLong SCAN_GEN =
+            new java.util.concurrent.atomic.AtomicLong();
+
+    public static IdentitySnapshot identitySnapshot() {
+        return identitySnapshot;
+    }
+
+    /** Session-transition hook (called by {@link GameSessionTracker} on the client thread). */
+    public static void clearIdentitySnapshot() {
+        identitySnapshot = IdentitySnapshot.EMPTY;
+    }
+
+    private static void publishEmptyIdentity() {
+        identitySnapshot = IdentitySnapshot.EMPTY;
+    }
+
+    private static void publishIdentity(Set<String> confirmedRows) {
+        identitySnapshot = new IdentitySnapshot(
+                confirmedRows, SCAN_GEN.incrementAndGet(), GameSessionTracker.currentSessionId());
+    }
+
     private final Set<String> announcedLobby = new HashSet<String>();     // nicks announced in-lobby this world
     private final List<String[]> currentDenicks = new ArrayList<String[]>(); // [nick, real] present in tab this scan
     private final Map<String, Integer> settleCounts = new HashMap<String, Integer>(); // "nick|real" -> clean scans seen
@@ -107,6 +133,7 @@ public final class NickUtils {
         if (mc == null || mc.thePlayer == null) return;
         if (!HypixelContext.isOnHypixel() || mc.theWorld == null) {
             Denicks.setIdentitiesVisible(false);
+            publishEmptyIdentity();
             if (!announcedLobby.isEmpty()) announcedLobby.clear();
             rearmReport();
             return;
@@ -143,6 +170,7 @@ public final class NickUtils {
         NetHandlerPlayClient net = mc.getNetHandler();
         if (net == null) {
             settleCounts.clear();
+            publishEmptyIdentity();
             return false;
         }
         String selfName = mc.thePlayer.getName();
@@ -177,13 +205,20 @@ public final class NickUtils {
         int consistent = 0;
         Map<String, Integer> ownerRows = new HashMap<String, Integer>();
         Set<String> consistentOwners = new HashSet<String>();
+        Set<String> confirmedRows = new HashSet<String>();
         for (Row r : rows) {
             String owner = r.skin.name.toLowerCase();
             Integer n = ownerRows.get(owner);
             ownerRows.put(owner, n == null ? 1 : n + 1);
             if (r.consistent()) {
                 consistentOwners.add(owner);
-                if (r.version == 4) consistent++;
+                if (r.version == 4) {
+                    consistent++;
+                    // Confirmed identity for automatic Urchin: a v4 row whose signed skin names its
+                    // own account. v1 (nick) rows are never included (amendment R11).
+                    String key = IdentitySnapshot.rowKey(r.name, r.id);
+                    if (key != null) confirmedRows.add(key);
+                }
             }
             // Tripwire: a row that isn't ours wearing OUR Mojang-signed skin.
             if (r.skin.name.equalsIgnoreCase(selfName) && !r.self) {
@@ -203,6 +238,7 @@ public final class NickUtils {
 
         if (tripped) {
             settleCounts.clear(); // identities are in flux — candidates must re-settle from scratch
+            publishEmptyIdentity();
             logWindowOnce(windowDiag);
             return false;
         }
@@ -224,6 +260,8 @@ public final class NickUtils {
             }
         }
         settleCounts.keySet().retainAll(present);
+
+        publishIdentity(confirmedRows);
 
         return consistent > 0;
     }

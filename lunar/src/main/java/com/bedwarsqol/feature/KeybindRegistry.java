@@ -10,20 +10,22 @@ import org.lwjgl.input.Keyboard;
 import java.util.Arrays;
 
 /**
- * Makes the "Open Settings" and "Open Game Menu" keys rebindable from Minecraft's own Controls menu.
- * Weave has no {@code ClientRegistry.registerKeyBinding}, so we append two vanilla {@link KeyBinding}s
+ * Makes the "Open Settings", "Open Game Menu" and "Send /pc INC" keys rebindable from Minecraft's own
+ * Controls menu. Weave has no {@code ClientRegistry.registerKeyBinding}, so we append vanilla {@link KeyBinding}s
  * to {@code GameSettings.keyBindings} ourselves, under the existing <i>Miscellaneous</i> category (a
  * custom category would NPE GuiControls' sort, which looks categories up in a fixed order map).
  *
  * <p>Registration runs once on the first client tick (when {@code gameSettings} exists). Because that is
  * after vanilla has already read {@code options.txt}, our config — not options.txt — is the source of
  * truth across restarts: each tick we copy any Controls rebind back into the config (and save), and the
- * actual key actions are fired from the config value by {@link SettingsKeyHandler}/{@link PauseKeyHandler}.
+ * actual key actions are fired from the config value by {@link SettingsKeyHandler}/{@link PauseKeyHandler}/
+ * {@link IncSender}.
  */
 public final class KeybindRegistry {
 
     public static KeyBinding settingsKey;
     public static KeyBinding pauseKey;
+    public static KeyBinding incKey;
     private static boolean registered;
 
     @SubscribeEvent
@@ -34,12 +36,15 @@ public final class KeybindRegistry {
         if (!registered) {
             int sCode = BedwarsQol.config != null ? BedwarsQol.config.settingsKeyCode : Keyboard.KEY_RSHIFT;
             int pCode = BedwarsQol.config != null ? BedwarsQol.config.pauseKeyCode : Keyboard.KEY_NONE;
+            int iCode = BedwarsQol.config != null ? BedwarsQol.config.pcIncKeyCode : Keyboard.KEY_NONE;
             settingsKey = new KeyBinding("Open BedwarsQOL Settings", sCode, "key.categories.misc");
             pauseKey = new KeyBinding("BedwarsQOL: Open Game Menu", pCode, "key.categories.misc");
+            incKey = new KeyBinding("BedwarsQOL: Send /pc INC", iCode, "key.categories.misc");
             KeyBinding[] cur = mc.gameSettings.keyBindings;
-            KeyBinding[] next = Arrays.copyOf(cur, cur.length + 2);
+            KeyBinding[] next = Arrays.copyOf(cur, cur.length + 3);
             next[cur.length] = settingsKey;
             next[cur.length + 1] = pauseKey;
+            next[cur.length + 2] = incKey;
             mc.gameSettings.keyBindings = next;
             registered = true;
         }
@@ -52,6 +57,10 @@ public final class KeybindRegistry {
         }
         if (pauseKey != null && pauseKey.getKeyCode() != BedwarsQol.config.pauseKeyCode) {
             BedwarsQol.config.pauseKeyCode = pauseKey.getKeyCode();
+            dirty = true;
+        }
+        if (incKey != null && incKey.getKeyCode() != BedwarsQol.config.pcIncKeyCode) {
+            BedwarsQol.config.pcIncKeyCode = incKey.getKeyCode();
             dirty = true;
         }
         if (dirty) BedwarsQol.config.save();

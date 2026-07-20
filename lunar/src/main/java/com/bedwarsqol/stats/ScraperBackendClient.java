@@ -4,15 +4,22 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 
+import com.google.gson.JsonArray;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 import java.util.function.ObjIntConsumer;
 
 /**
@@ -30,13 +37,44 @@ public final class ScraperBackendClient {
     // A batch may scrape several cold pages server-side; give it more room than a single lookup.
     private static final int BATCH_READ_TIMEOUT_MS = 30000;
 
+    /** The opt-in header the eligible owner client sends so the Worker enriches Urchin tags. */
+    private static final String URCHIN_OPT_IN_HEADER = "X-BWQOL-Urchin";
+
     private ScraperBackendClient() {}
+
+    /**
+     * Seam for opening the {@link #postSecret} connection so redirect/non-replay behavior can be
+     * exercised headlessly without a live TLS endpoint. The default opener is the real one; tests
+     * swap in a recording factory. Package-private on purpose — not part of the public API.
+     */
+    interface SecretConnectionFactory {
+        HttpURLConnection open(URL url) throws IOException;
+    }
+
+    static SecretConnectionFactory secretConnectionFactory =
+            new SecretConnectionFactory() {
+                @Override
+                public HttpURLConnection open(URL url) throws IOException {
+                    return (HttpURLConnection) url.openConnection();
+                }
+            };
 
     public static final class BackendException extends IOException {
         public BackendException(String message) { super(message); }
     }
 
     public static BedwarsStats fetch(String playerName, String baseUrl, String token, boolean fresh) throws IOException {
+        return fetch(playerName, baseUrl, token, fresh, null, null);
+    }
+
+    /**
+     * Single fetch, optionally Urchin-enriched: when {@code urchinUuid} is non-null the request carries
+     * the {@code X-BWQOL-Urchin} opt-in header and {@code ?uuid=<canonical>}, and any Urchin resolution
+     * in the response is delivered to {@code onUrchin}. Ordinary callers pass null for both — zero
+     * Urchin traffic, byte-identical to the legacy request.
+     */
+    public static BedwarsStats fetch(String playerName, String baseUrl, String token, boolean fresh,
+            String urchinUuid, Consumer<UrchinResult> onUrchin) throws IOException {
         if (playerName == null || playerName.trim().isEmpty()) {
             throw new BackendException("Empty player name");
         }
@@ -44,12 +82,23 @@ public final class ScraperBackendClient {
         if (base == null) throw new BackendException("No stats backend URL configured");
 
         String encoded = java.net.URLEncoder.encode(playerName.trim(), "UTF-8");
+        StringBuilder query = new StringBuilder();
+        if (fresh) query.append(query.length() == 0 ? '?' : '&').append("fresh=1");
+        if (urchinUuid != null && !urchinUuid.isEmpty()) {
+            query.append(query.length() == 0 ? '?' : '&').append("uuid=").append(urchinUuid);
+        }
         // fresh=1 tells the Worker to bypass (and refresh) its edge cache for an up-to-date scrape.
-        String url = base + "/bedwars/" + encoded + (fresh ? "?fresh=1" : "");
+        String url = base + "/bedwars/" + encoded + query;
         HttpURLConnection conn = open(url, token, READ_TIMEOUT_MS);
+        if (urchinUuid != null && !urchinUuid.isEmpty()) conn.setRequestProperty(URCHIN_OPT_IN_HEADER, "1");
 
         String body = readBody(conn);
-        return statsFromPlayerObject(parseJsonObject(body), playerName.trim());
+        JsonObject po = parseJsonObject(body);
+        if (onUrchin != null) {
+            UrchinResult r = parseUrchin(po);
+            if (r != null) onUrchin.accept(r);
+        }
+        return statsFromPlayerObject(po, playerName.trim());
     }
 
     /**
@@ -71,6 +120,19 @@ public final class ScraperBackendClient {
      */
     public static void fetchBatchStreaming(List<String> names, String baseUrl, String token,
             BiConsumer<String, BedwarsStats> onResult, ObjIntConsumer<String> onStar) throws IOException {
+        fetchBatchStreaming(names, baseUrl, token, onResult, onStar, null, null);
+    }
+
+    /**
+     * As above, plus Urchin: when {@code uuidsCsv} is non-null it is sent as {@code &uuids=<csv>}
+     * (index-aligned with {@code names}, {@code -} placeholder for ineligible members) and the
+     * {@code X-BWQOL-Urchin} opt-in header is sent. Urchin resolution (inline on base lines and via
+     * {@code urchinUpdate} follow-ups) is delivered to {@code onUrchin}. Null {@code uuidsCsv} = pure
+     * legacy stream, zero Urchin traffic.
+     */
+    public static void fetchBatchStreaming(List<String> names, String baseUrl, String token,
+            BiConsumer<String, BedwarsStats> onResult, ObjIntConsumer<String> onStar,
+            String uuidsCsv, BiConsumer<String, UrchinResult> onUrchin) throws IOException {
         if (names == null || names.isEmpty()) return;
         String base = normalizeBase(baseUrl);
         if (base == null) throw new BackendException("No stats backend URL configured");
@@ -86,9 +148,11 @@ public final class ScraperBackendClient {
         if (param.length() == 0) return;
 
         String url = base + "/bedwars/batch?names=" + param;
+        if (uuidsCsv != null && !uuidsCsv.isEmpty()) url += "&uuids=" + uuidsCsv;
         HttpURLConnection conn = open(url, token, BATCH_READ_TIMEOUT_MS);
         conn.setRequestProperty("Accept", "application/x-ndjson");
         conn.setRequestProperty("Accept-Encoding", "identity"); // keep NDJSON lines unbuffered
+        if (uuidsCsv != null && !uuidsCsv.isEmpty()) conn.setRequestProperty(URCHIN_OPT_IN_HEADER, "1");
 
         int code = conn.getResponseCode();
         InputStream in = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream();
@@ -113,7 +177,18 @@ public final class ScraperBackendClient {
                     if (onStar != null && level > 0) onStar.accept(name, level);
                     continue;
                 }
+                if (bool(po, "urchinUpdate", false)) {
+                    if (onUrchin != null) {
+                        UrchinResult ur = parseUrchin(po);
+                        if (ur != null) onUrchin.accept(name, ur);
+                    }
+                    continue;
+                }
                 onResult.accept(name, statsFromPlayerObject(po, name));
+                if (onUrchin != null) {
+                    UrchinResult ur = parseUrchin(po); // inline resolution on a base line
+                    if (ur != null) onUrchin.accept(name, ur);
+                }
             }
         }
     }
@@ -254,6 +329,191 @@ public final class ScraperBackendClient {
             return el.getAsInt();
         } catch (RuntimeException e) {
             return 0;
+        }
+    }
+
+    // ---- Urchin -------------------------------------------------------------
+
+    /**
+     * Parse the Urchin resolution fields from one player object (base line, single body, or
+     * {@code urchinUpdate} follow-up). Returns null when the line carries NO resolution fields at all
+     * (a lookup failure/timeout the client may retry). Static + pure for unit testing.
+     */
+    public static UrchinResult parseUrchin(JsonObject po) {
+        if (po == null) return null;
+        boolean checked = bool(po, "urchinChecked", false);
+        boolean unavailable = bool(po, "urchinUnavailable", false);
+        boolean notFound = bool(po, "urchinNotFound", false);
+        JsonObject urchin = obj(po, "urchin");
+        boolean hasUrchinField = urchin != null;
+        if (!checked && !unavailable && !notFound && !hasUrchinField) return null;
+        return new UrchinResult(parseTags(urchin), checked, unavailable, notFound, canonicalUuid(string(po, "urchinUuid")));
+    }
+
+    /** Canonical (lowercase, undashed) UUID form, or null when absent/blank. Defends the B1 merge key. */
+    private static String canonicalUuid(String raw) {
+        if (raw == null) return null;
+        String s = raw.trim().replace("-", "").toLowerCase(Locale.ROOT);
+        return s.isEmpty() ? null : s;
+    }
+
+    /** Parse the {@code tags} array of an {@code urchin} object into {@link UrchinTag}s. */
+    public static List<UrchinTag> parseTags(JsonObject urchin) {
+        List<UrchinTag> out = new ArrayList<UrchinTag>();
+        if (urchin == null || !urchin.has("tags")) return out;
+        JsonElement el = urchin.get("tags");
+        if (el == null || !el.isJsonArray()) return out;
+        JsonArray arr = el.getAsJsonArray();
+        for (JsonElement e : arr) {
+            if (e == null || !e.isJsonObject()) continue;
+            JsonObject t = e.getAsJsonObject();
+            String type = string(t, "type");
+            if (type == null || type.isEmpty()) continue;
+            String reason = string(t, "reason");
+            long addedOn = longNum(t, "addedOn");
+            Long expires = null;
+            if (t.has("expiresAtMs") && !t.get("expiresAtMs").isJsonNull()) {
+                // Present expiry must be valid: a non-numeric or non-positive value is treated as
+                // corrupt metadata and DROPS the tag defensively (never "never expires").
+                Long parsed = longObj(t, "expiresAtMs");
+                if (parsed == null || parsed <= 0L) continue;
+                expires = parsed;
+            }
+            out.add(new UrchinTag(type, reason, addedOn, expires));
+        }
+        return out;
+    }
+
+    /** Result of {@code GET /urchin/<name>} (manual command path). */
+    public static final class UrchinLookup {
+        public final boolean success;
+        public final String player;
+        public final String uuid;
+        public final List<UrchinTag> tags;
+        public final boolean stale;
+        public final boolean notFound;
+        public final boolean unavailable;
+
+        UrchinLookup(boolean success, String player, String uuid, List<UrchinTag> tags,
+                     boolean stale, boolean notFound, boolean unavailable) {
+            this.success = success;
+            this.player = player;
+            this.uuid = uuid;
+            this.tags = tags == null ? new ArrayList<UrchinTag>() : tags;
+            this.stale = stale;
+            this.notFound = notFound;
+            this.unavailable = unavailable;
+        }
+    }
+
+    /** Manual Urchin lookup by name; requires the opt-in header (owner-gated on the Worker). */
+    public static UrchinLookup getUrchin(String baseUrl, String token, String name) throws IOException {
+        String base = normalizeBase(baseUrl);
+        if (base == null) throw new BackendException("No stats backend URL configured");
+        String url = base + "/urchin/" + java.net.URLEncoder.encode(name.trim(), "UTF-8");
+        HttpURLConnection conn = open(url, token, READ_TIMEOUT_MS);
+        conn.setRequestProperty(URCHIN_OPT_IN_HEADER, "1");
+        String body = readBody(conn);
+        JsonObject po = parseJsonObject(body);
+        List<UrchinTag> tags = new ArrayList<UrchinTag>();
+        if (po.has("tags") && po.get("tags").isJsonArray()) {
+            JsonObject wrap = new JsonObject();
+            wrap.add("tags", po.get("tags"));
+            tags = parseTags(wrap);
+        }
+        return new UrchinLookup(bool(po, "success", false), string(po, "player"), string(po, "uuid"),
+                tags, bool(po, "stale", false), bool(po, "notFound", false), bool(po, "unavailable", false));
+    }
+
+    /** Result of a fail-closed secret POST. */
+    public static final class SecretPostResult {
+        public final boolean success;
+        public final int status;   // HTTP status, or 0 when no request was made (validation/transport error)
+        public final String error; // machine error token (e.g. "invalid_url", "key_managed_by_secret") or null
+
+        SecretPostResult(boolean success, int status, String error) {
+            this.success = success;
+            this.status = status;
+            this.error = error;
+        }
+    }
+
+    /**
+     * Validate a base URL for secret submission BEFORE any connection is opened or the secret touched.
+     * Requires an absolute URL, scheme exactly {@code https} (case-insensitive), and no userinfo. Pure
+     * and static so it is unit-testable. Returns an error token, or null when the URL is acceptable.
+     */
+    public static String validateSecretUrl(String baseUrl) {
+        if (baseUrl == null || baseUrl.trim().isEmpty()) return "invalid_url";
+        URI uri;
+        try {
+            uri = new URI(baseUrl.trim());
+        } catch (Exception e) {
+            return "invalid_url";
+        }
+        if (!uri.isAbsolute() || uri.getScheme() == null) return "invalid_url";
+        if (!uri.getScheme().toLowerCase(Locale.ROOT).equals("https")) return "insecure_scheme";
+        if (uri.getUserInfo() != null) return "userinfo_present";
+        if (uri.getHost() == null) return "invalid_url";
+        return null;
+    }
+
+    /**
+     * POST {@code bodyJson} to {@code baseUrl + path} over HTTPS with the shared token header. Validates
+     * the URL first (see {@link #validateSecretUrl}); opens the HTTPS connection with redirects
+     * disabled and treats every 3xx as failure — the secret body is never replayed to a redirect target.
+     */
+    public static SecretPostResult postSecret(String baseUrl, String path, String token, String bodyJson) {
+        String base = normalizeBase(baseUrl);
+        String err = validateSecretUrl(base);
+        if (err != null) return new SecretPostResult(false, 0, err);
+        try {
+            HttpURLConnection conn = secretConnectionFactory.open(new URL(base + path));
+            conn.setInstanceFollowRedirects(false);
+            conn.setRequestMethod("POST");
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setRequestProperty("User-Agent", "BedwarsQol/0.1 ScraperBackendClient");
+            if (token != null && !token.trim().isEmpty()) {
+                conn.setRequestProperty("X-BedwarsQol-Token", token.trim());
+            }
+            conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(READ_TIMEOUT_MS);
+            Tls.apply(conn);
+            byte[] payload = (bodyJson == null ? "" : bodyJson).getBytes(StandardCharsets.UTF_8);
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(payload);
+            }
+            int code = conn.getResponseCode();
+            if (code >= 300 && code < 400) return new SecretPostResult(false, code, "redirect_rejected");
+            InputStream in = code >= 200 && code < 300 ? conn.getInputStream() : conn.getErrorStream();
+            String respBody = readAll(in);
+            String errToken = null;
+            try {
+                JsonObject o = parseJsonObject(respBody);
+                errToken = string(o, "error");
+            } catch (IOException ignored) { }
+            return new SecretPostResult(code >= 200 && code < 300, code, errToken);
+        } catch (Exception e) {
+            // Never surface the exception text (it can embed the URL, never the secret) — a generic token.
+            return new SecretPostResult(false, 0, "transport_error");
+        }
+    }
+
+    private static long longNum(JsonObject root, String key) {
+        Long v = longObj(root, key);
+        return v == null ? 0L : v;
+    }
+
+    private static Long longObj(JsonObject root, String key) {
+        if (root == null || key == null || !root.has(key)) return null;
+        JsonElement el = root.get(key);
+        if (el == null || el.isJsonNull()) return null;
+        try {
+            return el.getAsLong();
+        } catch (RuntimeException e) {
+            return null;
         }
     }
 

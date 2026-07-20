@@ -31,7 +31,6 @@ import java.util.Collection;
 /**
  * Keeps Minecraft's default tab player list, but adds client tweaks on top of it:
  *   - Size (Small/Medium/Large): uniformly scales the whole vanilla list around the top centre.
- *   - Numeric ping (toggle): replaces vanilla's signal-bar icon with the player's latency in ms.
  *   - Hide Header/Footer: suppresses the server-sent text above/below the list.
  *   - BedWars stats overlay, drawn inline on the vanilla list.
  *
@@ -40,7 +39,7 @@ import java.util.Collection;
  * {@code 13} is the per-cell space reserved at the RIGHT for the ping icon. Two things cause names to
  * collide with the ping / stats overlay:
  * <ol>
- *   <li>The {@code 13} reserve is far too small for the numeric ping + stats text, so they get drawn
+ *   <li>The {@code 13} reserve is far too small for the stats text, so they get drawn
  *       on top of the name. We {@link #bedwarsqol$widenPingReserve widen that constant} to the widest
  *       ping+stats across all players, so every column reserves exactly enough room on the right.</li>
  *   <li>The {@code width-50} clamp shrinks {@code i1} below the content width when names are long (or
@@ -95,11 +94,6 @@ public abstract class GuiPlayerTabOverlayMixin {
         return Math.min(STATS_SCALE / s, 1.0f);
     }
 
-    /** Whether to show the numeric "123ms" ping instead of vanilla's signal-bar icon. */
-    private static boolean bedwarsqol$pingEnabled() {
-        return BedwarsQol.config == null || BedwarsQol.config.tabNumericPing;
-    }
-
     /**
      * True while in an active Bedwars game, where Hypixel masks every player's ping to a flat 1ms — so
      * any ping readout (numeric value or the vanilla signal bars) is meaningless. We hide the ping
@@ -110,17 +104,10 @@ public abstract class GuiPlayerTabOverlayMixin {
         return HypixelContext.isInActiveBedwarsGame();
     }
 
-    private static String bedwarsqol$pingText(int ping) {
-        return ping < 0 ? "?" : ping + "ms";
-    }
-
     /** Width (px) the right-hand zone needs for one player: ping value (or vanilla bar) + stats overlay. */
-    private static int bedwarsqol$rightReserveFor(FontRenderer fr, NetworkPlayerInfo info, boolean pingOn) {
-        // Ping value + 1px right margin + 2px gap before the stats; or vanilla's 13px bar reserve when off.
-        // In an active game the ping element is hidden entirely, so it reserves nothing — only the stats do.
-        int reserve = bedwarsqol$hidePing()
-                ? 0
-                : (pingOn ? fr.getStringWidth(bedwarsqol$pingText(info.getResponseTime())) + 3 : VANILLA_PING_RESERVE);
+    private static int bedwarsqol$rightReserveFor(FontRenderer fr, NetworkPlayerInfo info) {
+        // Vanilla's 13px bar reserve; the ping element is hidden entirely in an active game (reserves nothing).
+        int reserve = bedwarsqol$hidePing() ? 0 : VANILLA_PING_RESERVE;
         String stats = TabListLookup.statsTextForPlayerInfo(info);
         if (stats != null && !stats.isEmpty()) {
             // Scaled stats width + 2px gap to the score column + 2px safety.
@@ -159,11 +146,10 @@ public abstract class GuiPlayerTabOverlayMixin {
         NetHandlerPlayClient net = mc.getNetHandler();
         if (net == null) return original;
         FontRenderer fr = mc.fontRendererObj;
-        boolean pingOn = bedwarsqol$pingEnabled();
         int max = original;
         for (NetworkPlayerInfo info : net.getPlayerInfoMap()) {
             if (info == null) continue;
-            int r = bedwarsqol$rightReserveFor(fr, info, pingOn);
+            int r = bedwarsqol$rightReserveFor(fr, info);
             if (r > max) max = r;
         }
         return max;
@@ -207,14 +193,13 @@ public abstract class GuiPlayerTabOverlayMixin {
         int n = Math.min(all.size(), 80);
         if (n <= 0) return 0;
 
-        boolean pingOn = bedwarsqol$pingEnabled();
         boolean hearts = objective != null
                 && objective.getRenderType() == IScoreObjectiveCriteria.EnumRenderType.HEARTS;
         int maxName = 0, reserve = VANILLA_PING_RESERVE, scoreW = 0;
         for (NetworkPlayerInfo info : all) {
             if (info == null) continue;
             maxName = Math.max(maxName, fr.getStringWidth(getPlayerName(info)));
-            reserve = Math.max(reserve, bedwarsqol$rightReserveFor(fr, info, pingOn));
+            reserve = Math.max(reserve, bedwarsqol$rightReserveFor(fr, info));
             if (objective != null && !hearts && scoreboard != null && info.getGameProfile() != null) {
                 Score sc = scoreboard.getValueFromObjective(info.getGameProfile().getName(), objective);
                 if (sc != null) scoreW = Math.max(scoreW, fr.getStringWidth(" " + sc.getScorePoints()));
@@ -265,21 +250,12 @@ public abstract class GuiPlayerTabOverlayMixin {
         }
     }
 
-    /** Latency colour for the numeric ping (greener = better), grey when unknown. */
-    private static int bedwarsqol$pingColor(int ping) {
-        if (ping < 0) return 0xFFAAAAAA;
-        if (ping <= 80) return 0xFF55FF55;
-        if (ping <= 150) return 0xFFFFFF55;
-        if (ping <= 300) return 0xFFFFAA00;
-        return 0xFFFF5555;
-    }
-
     /**
-     * Draws the BedWars stats overlay, and — when the Tab Numeric Ping setting is on —
-     * replaces vanilla's signal-bar icon with the latency in milliseconds (cancelling the original
-     * {@code drawPing} so the bars aren't drawn on top). With numeric ping off, the overlay is still
-     * drawn but the vanilla bars are left intact. Everything here lives inside the right-hand zone that
-     * {@link #bedwarsqol$widenPingReserve} reserved, so it never reaches the name.
+     * Draws the BedWars stats overlay inline on the vanilla tab list. In an active Bedwars game the
+     * meaningless 1ms ping is hidden entirely (cancelling vanilla's signal bars and reclaiming the width
+     * for stats); otherwise vanilla's bar icon is left intact and the overlay is drawn to its left.
+     * Everything here lives inside the right-hand zone that {@link #bedwarsqol$widenPingReserve} reserved,
+     * so it never reaches the name.
      */
     @Inject(method = "drawPing", at = @At("HEAD"), cancellable = true)
     private void bedwarsqol$drawPingAndStats(int slotWidth, int x, int y, NetworkPlayerInfo info, CallbackInfo ci) {
@@ -288,22 +264,15 @@ public abstract class GuiPlayerTabOverlayMixin {
         FontRenderer fr = mc.fontRendererObj;
 
         boolean hidePing = bedwarsqol$hidePing();
-        boolean pingOn = !hidePing && bedwarsqol$pingEnabled();
         int cellRight = x + slotWidth;
-        // Left edge of the ping element — the stats overlay is right-aligned just to its left.
+        // Left edge of the reserved zone; the stats overlay is right-aligned inside it.
         int rightEdge;
-        if (pingOn) {
-            int ping = info.getResponseTime();
-            String ms = bedwarsqol$pingText(ping);
-            int pingX = cellRight - 1 - fr.getStringWidth(ms);
-            fr.drawStringWithShadow(ms, (float) pingX, (float) y, bedwarsqol$pingColor(ping));
-            rightEdge = pingX - 2;
-        } else if (hidePing) {
-            // In-game: Hypixel masks ping to 1ms, so draw nothing (and cancel vanilla's bars below). The
+        if (hidePing) {
+            // In-game: Hypixel masks ping to 1ms, so draw nothing and cancel vanilla's bars below. The
             // stats overlay reclaims the full right margin.
             rightEdge = cellRight - 1;
         } else {
-            // Numeric ping off (lobby): vanilla draws its bar icon at cellRight - 11 (10px wide); stop left of it.
+            // Lobby: vanilla draws its bar icon at cellRight - 11 (10px wide); stop left of it.
             rightEdge = cellRight - 11 - 2;
         }
 
@@ -324,8 +293,7 @@ public abstract class GuiPlayerTabOverlayMixin {
             GlStateManager.popMatrix();
         }
 
-        // Suppress vanilla's bars whenever we've taken over the ping slot: numeric ping drawn in their
-        // place, or the ping hidden entirely in-game.
-        if (pingOn || hidePing) ci.cancel();
+        // Suppress vanilla's bars in-game, where we've hidden the ping entirely and taken over the slot.
+        if (hidePing) ci.cancel();
     }
 }

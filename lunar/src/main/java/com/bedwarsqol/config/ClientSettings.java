@@ -1,5 +1,6 @@
 package com.bedwarsqol.config;
 
+import com.bedwarsqol.gui.render.GuiTheme;
 import org.lwjgl.input.Keyboard;
 
 import java.util.Locale;
@@ -13,25 +14,8 @@ public class ClientSettings {
     public int hudFont = 0;
     /** Size of the settings GUI panel. 0 = small, 1 = medium, 2 = large. */
     public int guiSize = 2;
-    /** Selected module-card colour theme (index into SettingsGui.THEMES; 0 = default grayscale, no change). */
-    public int moduleTheme = 0;
-
-    public boolean potionStatusEnabled = true;
-    /** Only render this HUD while in an active BedWars game (off = render everywhere). */
-    public boolean potionInGameOnly = false;
-    public int potionHudX = 5;
-    public int potionHudY = 5;
-    public int potionHudAnchor = 0;
-    public float potionHudScale = 1.0f;
-    /** Draw a modern translucent panel behind this HUD element. */
-    public boolean potionBackgroundEnabled = false;
-
-    public boolean armorTypeEnabled = true;
-    public boolean armorInGameOnly = false;
-    public int armorHudX = 5;
-    public int armorHudY = 34;
-    public int armorHudAnchor = 0;
-    public float armorHudScale = 1.0f;
+    /** GUI accent color token: orange (default) / red / blue / green. Drives only the settings-GUI accent; HUD stays neutral. */
+    public String guiAccent = "orange";
 
     // --- BedWars HUDs (only render in an active BedWars game) ---
 
@@ -57,13 +41,6 @@ public class ClientSettings {
     public int emeraldTimerHudAnchor = 2;
     public float emeraldTimerHudScale = 1.0f;
 
-    public boolean keystrokesEnabled = false;
-    public boolean keystrokesInGameOnly = false;
-    public int keystrokesHudX = -10;
-    public int keystrokesHudY = -20;
-    public int keystrokesHudAnchor = 8; // bottom-right by default
-    public float keystrokesHudScale = 1.0f;
-
     public boolean playerStats = false;
     /** Nametag/tab stat overlays no longer have toggles — forced on with Player Stats (see sanitize). */
     public boolean playerStatsNametag = true;
@@ -83,9 +60,6 @@ public class ClientSettings {
     /** When in an active Bedwars game, broadcast the sweatiest enemy teams to party chat once. */
     public boolean statsSweatReport = false;
 
-    /** Auto GG: say "gg" in chat once each time a BedWars game ends. */
-    public boolean autoGg = false;
-
     /** Party Join Alert: red "Party Joined" in chat when a premade team queues a 2s/3s/4s game. */
     public boolean partyJoinAlert = false;
 
@@ -96,6 +70,19 @@ public class ClientSettings {
      * {@link com.bedwarsqol.feature.ChatPlayerHeads}).
      */
     public boolean chatPlayerHeads = false;
+
+    // --- Chat module (Lunar keeps only the two inc pieces; Lunar Client ships the generic chat QOL
+    // natively, so Unlimited/Keep History/Stack Spam/Copy Chat/mention sound live in the Forge tree only) ---
+
+    /**
+     * Inc Alert: double pling when a teammate or party member says "inc"/"incoming" in an active
+     * Bedwars game. Standalone master here; the Forge tree nests it under Chat Notifications.
+     */
+    public boolean chatNotifyInc = false;
+    /** Send INC keybind: the "Send /pc INC" key (Controls menu) sends /pc INC with a 2s cooldown. */
+    public boolean pcIncKey = true;
+    /** Key code for the Send /pc INC key, echoed from the Controls menu rebind. Default unbound. */
+    public int pcIncKeyCode = Keyboard.KEY_NONE;
 
     /**
      * Cheater Detector: master toggle for the passive observer-side checks (see
@@ -133,6 +120,23 @@ public class ClientSettings {
      */
     public boolean autoDenick = true;
 
+    /**
+     * Urchin Tags: master toggle for community-reported blacklist tags from urchin.ws, resolved
+     * server-side by the stats Worker (see {@link com.bedwarsqol.feature.UrchinAlert}). Off by
+     * default. When off the mod causes zero Urchin traffic and shows no tags.
+     */
+    public boolean urchinTags = false;
+    /** Sub of Urchin Tags: append the priority tag badge to the tab-list overlay. */
+    public boolean urchinBadgeTab = true;
+    /** Sub of Urchin Tags: one private chat line the first time a tagged player is seen each game. */
+    public boolean urchinChatAlert = true;
+    /** Sub of Urchin Tags: play a pling with the chat alert (cheater-type tags only). */
+    public boolean urchinAlertSound = true;
+    /** Sub of Urchin Tags: append the priority tag badge above the in-game nametag. */
+    public boolean urchinBadgeNametag = true;
+    /** Sub of Urchin Tags: fuse a tag with live Cheater Detector flags into one red alert + badge. */
+    public boolean urchinAcFusion = true;
+
     // Stats come from a Cloudflare Worker that each user self-hosts (see server/stats-worker). No
     // public backend is shipped — never commit a real URL or token here. Users set their own via
     // /bedwarsqol statsurl <url> and (optionally) /bedwarsqol statstoken <token>.
@@ -160,17 +164,6 @@ public class ClientSettings {
 
     // --- Visual / gameplay tweaks ---
 
-    /** Custom highlight on the block you're looking at. */
-    public boolean blockOverlayEnabled = false;
-    public int blockOverlayColor = 0x804A90E2;  // ARGB
-    public int blockOverlayStyle = 2;           // 0 = outline, 1 = fill, 2 = both
-    public boolean blockOverlaySeeThrough = false;
-    public float blockOverlayLineWidth = 2.0f;
-
-    /** Center-screen countdown for nearby primed TNT. */
-    public boolean tntFuseEnabled = false;
-    public int tntFuseRadius = 10;
-
     /** First-person held-item position offset (X/Y/Z, eye space) + size scale, gated by the master toggle. */
     public boolean handPositionEnabled = false;
     public float handPosX = 0f;
@@ -185,26 +178,13 @@ public class ClientSettings {
     public int styledTabListSize = 2;
     /** Hide the server-sent header/footer text above and below the tab player list. */
     public boolean tabHideHeaderFooter = false;
-    /** Show each player's latency as a number ("123ms") in the tab list instead of the vanilla signal-bar icon. */
-    public boolean tabNumericPing = true;
-
-    // --- Debug ---
-
-    /** Spawn clientside "Test Dummy" practice players with a keybind (real hittable entities in singleplayer). */
-    public boolean dummyEnabled = false;
-    /** Key that spawns a dummy at the block you're looking at (default unbound). */
-    public int dummySpawnKeyCode = Keyboard.KEY_NONE;
 
     public void sanitize() {
         defaultTextSize = clamp(defaultTextSize, 0, 2);
         hudDisplayMode = clamp(hudDisplayMode, 0, 1);
         hudFont = clamp(hudFont, 0, 1);
         guiSize = clamp(guiSize, 0, 2);
-        if (moduleTheme < 0) moduleTheme = 0; // upper bound clamped GUI-side against THEMES.length
-        potionHudAnchor = clamp(potionHudAnchor, 0, 8);
-        armorHudAnchor = clamp(armorHudAnchor, 0, 8);
-        if (potionHudScale < 0.3f || potionHudScale > 10.0f) potionHudScale = defaultTextSizeScale();
-        if (armorHudScale < 0.3f || armorHudScale > 10.0f) armorHudScale = defaultTextSizeScale();
+        guiAccent = GuiTheme.normalizeToken(guiAccent);
 
         inventoryHudAnchor = clamp(inventoryHudAnchor, 0, 8);
         if (inventoryHudScale < 0.3f || inventoryHudScale > 10.0f) inventoryHudScale = defaultTextSizeScale();
@@ -212,14 +192,9 @@ public class ClientSettings {
         if (diamondTimerHudScale < 0.3f || diamondTimerHudScale > 10.0f) diamondTimerHudScale = defaultTextSizeScale();
         emeraldTimerHudAnchor = clamp(emeraldTimerHudAnchor, 0, 8);
         if (emeraldTimerHudScale < 0.3f || emeraldTimerHudScale > 10.0f) emeraldTimerHudScale = defaultTextSizeScale();
-        keystrokesHudAnchor = clamp(keystrokesHudAnchor, 0, 8);
-        if (keystrokesHudScale < 0.3f || keystrokesHudScale > 10.0f) keystrokesHudScale = defaultTextSizeScale();
         scoreboardSize = clamp(scoreboardSize, 0, 2);
         styledTabListSize = clamp(styledTabListSize, 0, 2);
 
-        blockOverlayStyle = clamp(blockOverlayStyle, 0, 2);
-        if (blockOverlayLineWidth < 0.5f || blockOverlayLineWidth > 10.0f) blockOverlayLineWidth = 2.0f;
-        tntFuseRadius = clamp(tntFuseRadius, 1, 64);
         handPosX = clampf(handPosX, -1.0f, 1.0f);
         handPosY = clampf(handPosY, -1.0f, 1.0f);
         handPosZ = clampf(handPosZ, -1.0f, 1.0f);
@@ -233,7 +208,7 @@ public class ClientSettings {
         statsBackendToken = statsBackendToken.trim();
         if (settingsKeyCode < 0) settingsKeyCode = Keyboard.KEY_RSHIFT;
         if (pauseKeyCode < 0) pauseKeyCode = Keyboard.KEY_NONE;
-        if (dummySpawnKeyCode < 0) dummySpawnKeyCode = Keyboard.KEY_NONE;
+        if (pcIncKeyCode < 0) pcIncKeyCode = Keyboard.KEY_NONE;
     }
 
     /** Coerce {@link #chatStatsMode} to a known token, defaulting anything unrecognised to "auto". */
@@ -259,12 +234,9 @@ public class ClientSettings {
 
     public void applyDefaultTextSize() {
         float scale = defaultTextSizeScale();
-        potionHudScale = scale;
-        armorHudScale = scale;
         inventoryHudScale = scale;
         diamondTimerHudScale = scale;
         emeraldTimerHudScale = scale;
-        keystrokesHudScale = scale;
     }
 
     public void save() {

@@ -11,6 +11,15 @@
  */
 
 import { getBedwars, streamBedwarsBatch } from "./scrape.js";
+import {
+  urchinAllowed,
+  urchinCapable,
+  normalizeUuid,
+  tagsForUuids,
+  tagsForName,
+  resultFields,
+  handleKeySet,
+} from "./urchin.js";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -44,8 +53,35 @@ export default {
       if (names.length === 0) {
         return jsonResponse({ success: false, error: "no_names" }, 400);
       }
+      // Urchin enrichment: owner token + opt-in header + KV, plus index-aligned uuids
+      // ("-" = ineligible member, never Coral-resolved). Anything off -> pure legacy stream.
+      let urchinCtx = null;
+      if (urchinAllowed(request, env)) {
+        const uuidsParam = url.searchParams.get("uuids") || "";
+        const rawUuids = uuidsParam ? uuidsParam.split(",").map((s) => s.trim()) : [];
+        if (rawUuids.length === names.length) {
+          const uuidByName = new Map();
+          const conflicted = new Set();
+          for (let i = 0; i < names.length; i++) {
+            const u = rawUuids[i] === "-" ? null : normalizeUuid(rawUuids[i]);
+            if (!u) continue;
+            const k = names[i].toLowerCase();
+            // Case-varied duplicate names with DIFFERENT uuids cannot be aligned through the
+            // case-insensitive stream dedupe - fail closed: neither uuid resolves via this
+            // batch (the client's bounded single path picks each up unambiguously).
+            if (uuidByName.has(k) && uuidByName.get(k) !== u) conflicted.add(k);
+            else uuidByName.set(k, u);
+          }
+          for (const k of conflicted) uuidByName.delete(k);
+          // Without STATS_KV the module makes zero Coral calls but still tells the owner
+          // client "resolved unavailable" so it does not misdiagnose authentication.
+          if (uuidByName.size > 0) {
+            urchinCtx = { uuidByName, unavailableOnly: !urchinCapable(env) };
+          }
+        }
+      }
       // Streams NDJSON (one line per player as it resolves) — not a buffered JSON response.
-      return streamBedwarsBatch(names, env, ctx);
+      return streamBedwarsBatch(names, env, ctx, urchinCtx);
     }
 
     const bedwars = path.match(/^\/bedwars\/([^/]+)$/);
@@ -57,7 +93,56 @@ export default {
         return jsonResponse({ success: false, error: "invalid_player_name", player }, 400);
       }
       const fresh = url.searchParams.get("fresh") === "1";
-      return jsonResponse(await getBedwars(player, env, ctx, fresh));
+      const body = await getBedwars(player, env, ctx, fresh);
+      // Automatic-single Urchin enrichment is UUID-only: the eligible client sends
+      // ?uuid=<canonical>; missing/invalid uuid -> no Coral lookup, no resolution metadata.
+      if (urchinAllowed(request, env)) {
+        const uuid = normalizeUuid(url.searchParams.get("uuid") || "");
+        if (uuid) {
+          if (!urchinCapable(env)) {
+            body.urchinUnavailable = true;
+          } else {
+            try {
+              const results = await tagsForUuids([uuid], env, ctx);
+              Object.assign(body, resultFields(results.get(uuid), uuid));
+            } catch (_) { /* silent degradation */ }
+          }
+        }
+      }
+      return jsonResponse(body);
+    }
+
+    if (path === "/urchin/key" && request.method === "POST") {
+      return handleKeySet(request, env, ctx);
+    }
+
+    // Manual lookup: the only name-resolving Coral path.
+    const urchin = path.match(/^\/urchin\/([^/]+)$/);
+    if (urchin && request.method === "GET") {
+      if (!urchinAllowed(request, env)) {
+        return jsonResponse({ success: false, error: "unauthorized" }, 403);
+      }
+      const player = decodeURIComponent(urchin[1]);
+      if (!NAME_RE.test(player)) {
+        return jsonResponse({ success: false, error: "invalid_player_name", player }, 400);
+      }
+      if (!urchinCapable(env)) {
+        return jsonResponse({
+          success: true, player, uuid: null, tags: [], stale: false, notFound: false, unavailable: true,
+        });
+      }
+      const r = await tagsForName(player, env, ctx);
+      return jsonResponse({
+        success: true,
+        player,
+        uuid: r.uuid || null,
+        tags: (r.tags || []).map(({ type, reason, addedOn, expiresAt }) => ({
+          type, reason, addedOn, ...(expiresAt != null ? { expiresAtMs: expiresAt } : {}),
+        })),
+        stale: r.stale === true,
+        notFound: r.state === "notfound",
+        unavailable: r.state === "unavailable",
+      });
     }
 
     const test = path.match(/^\/test\/([^/]+)$/);

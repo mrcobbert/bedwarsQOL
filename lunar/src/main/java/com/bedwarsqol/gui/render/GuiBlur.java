@@ -9,6 +9,7 @@ import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
 import net.minecraft.client.shader.Framebuffer;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL12;
+import org.lwjgl.opengl.GL14;
 
 /**
  * Background blur for the custom GUI screens, done with raw OpenGL on the framebuffer — deliberately NOT
@@ -36,6 +37,10 @@ public final class GuiBlur {
     }
 
     private static final long FADE_MS = 220L;
+
+    // Blend-color enums (GL 1.4 / ARB_imaging); this LWJGL 2 build exposes glBlendColor but not the enums.
+    private static final int GL_CONSTANT_ALPHA = 0x8003;
+    private static final int GL_ONE_MINUS_CONSTANT_ALPHA = 0x8004;
 
     private static long openTimeMs;
     private static boolean active;
@@ -139,12 +144,17 @@ public final class GuiBlur {
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_S, GL12.GL_CLAMP_TO_EDGE);
         GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_WRAP_T, GL12.GL_CLAMP_TO_EDGE);
         if (blend) {
+            // Blend by a CONSTANT alpha, not GL_SRC_ALPHA: the world framebuffer's alpha channel is
+            // non-uniform (sky clears to ~0, glass/water write partial alpha) and the blur chain copies
+            // it, so SRC_ALPHA blending composited the blur weakly over those regions — the sky and
+            // windows showed through sharp. Constant alpha ignores texel alpha entirely.
             GlStateManager.enableBlend();
-            GlStateManager.blendFunc(GL11.GL_SRC_ALPHA, GL11.GL_ONE_MINUS_SRC_ALPHA);
+            GL14.glBlendColor(0f, 0f, 0f, alpha);
+            GlStateManager.blendFunc(GL_CONSTANT_ALPHA, GL_ONE_MINUS_CONSTANT_ALPHA);
         } else {
             GlStateManager.disableBlend();
         }
-        GlStateManager.color(1f, 1f, 1f, alpha);
+        GlStateManager.color(1f, 1f, 1f, 1f);
 
         Tessellator tess = Tessellator.getInstance();
         WorldRenderer wr = tess.getWorldRenderer();

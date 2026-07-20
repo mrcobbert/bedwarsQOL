@@ -7,8 +7,8 @@
 #
 # Reference values below are from Jacob's known-good machine (Jul 2, 2026).
 
-GOOD_JAR_SHA="9c652d4d6b0088138d6f32267fe5560adb3716ecc13f67298a8de7048544d771"
-GOOD_JAR_NAME="BedwarsQOL-Lunar-0.3.9.jar (built Jul 11, 430416 bytes)"
+GOOD_JAR_SHA="2265e20b26cf4bd1d6dfeb2e0446f01a5acb373f531efe4d4caa549c3eb5753d"
+GOOD_JAR_NAME="BedwarsQOL-Lunar-0.5.0.jar (built Jul 15 final2, 454764 bytes)"
 GOOD_LOADER_SHA="e63da5ed3cc85868088527cd7d49ebd708785b6567da389fe89a89913ef4afd2"
 GOOD_LOADER_NAME="Weave-Loader-Agent-1.3.3.jar"
 

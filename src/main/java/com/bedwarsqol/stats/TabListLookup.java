@@ -1,6 +1,8 @@
 package com.bedwarsqol.stats;
 
 import com.bedwarsqol.BedwarsQol;
+import com.bedwarsqol.config.ClientSettings;
+import com.bedwarsqol.feature.UrchinAlert;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetworkPlayerInfo;
 import net.minecraft.util.EnumChatFormatting;
@@ -34,16 +36,40 @@ public final class TabListLookup {
         java.util.UUID uuid = info.getGameProfile().getId();
         if (uuid == null) return null;
 
-        if (!BedwarsQol.config.playerStats || !BedwarsQol.config.playerStatsTab) return null;
+        ClientSettings cfg = BedwarsQol.config;
+        // Fetch when Player Stats OR the Urchin tab badge/alert needs this player's identity.
+        if (!UrchinTag.needsTabIdentity(cfg)) return null;
+
+        String name = info.getGameProfile().getName();
+        boolean urchinEligible = cfg.urchinTags
+                && UrchinTag.badgeAllowed(EligibilitySnapshot.current(), name, uuid);
 
         BedwarsStats stats = StatsCache.getCached(uuid);
         if (stats == null) {
-            StatsCache.ensureFetched(uuid, StatsCache.PRIORITY_TAB);
+            StatsCache.ensureFetched(uuid, StatsCache.PRIORITY_TAB, urchinEligible);
             return null;
         }
-        String s = stats.formatForTab(BedwarsModeDetector.current(),
-                BedwarsQol.config.playerStatsShowLevel, BedwarsQol.config.playerStatsShowRank);
-        return s == null || s.isEmpty() ? null : s;
+        // A cache hit still needs to keep any eligible Urchin refresh moving.
+        if (urchinEligible) StatsCache.ensureFetched(uuid, StatsCache.PRIORITY_TAB, true);
+
+        // Rendering stays per-module: Player Stats off + Urchin on -> only the badge renders.
+        String stat = "";
+        if (cfg.playerStats && cfg.playerStatsTab) {
+            String s = stats.formatForTab(BedwarsModeDetector.current(),
+                    cfg.playerStatsShowLevel, cfg.playerStatsShowRank);
+            if (s != null) stat = s;
+        }
+        String badge = urchinBadge(cfg, stats, name, urchinEligible);
+        String out = stat + badge;
+        return out.isEmpty() ? null : out;
+    }
+
+    /** The Urchin priority-tag badge for the tab overlay, or "" when off / no active tag. */
+    private static String urchinBadge(ClientSettings cfg, BedwarsStats stats, String name, boolean eligible) {
+        if (cfg == null || !cfg.urchinTags || !cfg.urchinBadgeTab || !eligible) return "";
+        UrchinTag tag = stats.priorityUrchinTag(System.currentTimeMillis());
+        if (tag == null) return "";
+        return tag.badgeToken(UrchinAlert.isFusionHighlighted(name));
     }
 
     /**

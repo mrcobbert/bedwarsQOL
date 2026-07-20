@@ -13,7 +13,6 @@
     "FontRendererMixin",
     "GuiScreenMixin",
     "ItemRendererMixin",
-    "RenderGlobalMixin",
     "NetHandlerPlayClientMixin",
     "PlayerControllerMPMixin"
   ],

@@ -8,7 +8,9 @@
     "dev": "wrangler dev --remote",
     "test:local": "node scripts/run-local-probes.mjs",
     "test:worker": "node scripts/run-worker-probe.mjs",
-    "deploy-and-test": "bash scripts/deploy-and-test.sh"
+    "deploy-and-test": "bash scripts/deploy-and-test.sh",
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "deploy:owner": "wrangler deploy -c wrangler.owner.toml"
   },
   "devDependencies": {
     "wrangler": "^4.14.0"

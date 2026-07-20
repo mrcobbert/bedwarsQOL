@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "com.bedwarsqol"
-version = "0.3.15"
+version = "0.5.0"
 
 weave {
     configure {
@@ -34,6 +34,15 @@ dependencies {
     compileOnly("org.lwjgl.lwjgl:lwjgl:2.9.4-nightly-20150209")
     compileOnly("com.google.code.gson:gson:2.2.4")
     compileOnly("com.mojang:authlib:1.5.21")
+
+    // Pure-logic unit tests (JUnit 4, Java-8 compatible). gson is compileOnly above, so it must be on
+    // the test classpath explicitly for ScraperBackendClient's parse tests to run.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("com.google.code.gson:gson:2.2.4")
+}
+
+tasks.withType<Test>().configureEach {
+    useJUnit()
 }
 
 java {

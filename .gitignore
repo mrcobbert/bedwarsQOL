@@ -412,3 +412,6 @@ error.txt
 # local-only notes (not for the repo)
 /SETUP.txt
 /FEATURES.txt
+
+# Wrangler local cache (repo root)
+.wrangler/

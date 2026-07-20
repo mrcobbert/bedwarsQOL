@@ -1,11 +1,17 @@
 package com.bedwarsqol.mixin;
 
+import com.bedwarsqol.BedwarsQol;
+import com.bedwarsqol.config.ClientSettings;
+import com.bedwarsqol.feature.ChatCopyAccess;
 import com.bedwarsqol.feature.ChatHoverStats;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.audio.PositionedSoundRecord;
 import net.minecraft.client.gui.GuiChat;
 import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.util.ChatStyle;
+import net.minecraft.util.EnumChatFormatting;
 import net.minecraft.util.IChatComponent;
+import net.minecraft.util.ResourceLocation;
 import org.lwjgl.input.Mouse;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -43,5 +49,27 @@ public abstract class GuiChatMixin extends GuiScreen {
         List<String> lines = ChatHoverStats.buildTooltip(comp);
         if (lines == null || lines.isEmpty()) return;
         this.drawHoveringText(lines, mouseX, mouseY);
+    }
+
+    /**
+     * Copy Chat: right-click a chat line to copy the full original message (color codes stripped) to
+     * the clipboard. Right-click does nothing in the vanilla chat screen, so nothing is displaced;
+     * the button-press click confirms the copy.
+     */
+    @Inject(method = "mouseClicked", at = @At("HEAD"))
+    private void bedwarsqol$copyChat(int mouseX, int mouseY, int mouseButton, CallbackInfo ci) {
+        ClientSettings cfg = BedwarsQol.config;
+        if (cfg == null || !cfg.chatCopy || mouseButton != 1) return;
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc == null || mc.ingameGUI == null) return;
+        Object chat = mc.ingameGUI.getChatGUI();
+        if (!(chat instanceof ChatCopyAccess)) return;
+        String formatted = ((ChatCopyAccess) chat).bedwarsqol$fullTextAt(Mouse.getX(), Mouse.getY());
+        if (formatted == null) return;
+        String plain = EnumChatFormatting.getTextWithoutFormattingCodes(formatted);
+        if (plain == null || plain.trim().isEmpty()) return;
+        GuiScreen.setClipboardString(plain.trim());
+        mc.getSoundHandler().playSound(
+                PositionedSoundRecord.create(new ResourceLocation("gui.button.press"), 1.0F));
     }
 }

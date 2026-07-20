@@ -1,10 +1,13 @@
 package com.bedwarsqol.feature;
 
 import com.bedwarsqol.BedwarsQol;
+import com.bedwarsqol.config.ClientSettings;
 import com.bedwarsqol.stats.BedwarsModeDetector;
 import com.bedwarsqol.stats.BedwarsStats;
+import com.bedwarsqol.stats.EligibilitySnapshot;
 import com.bedwarsqol.stats.HypixelContext;
 import com.bedwarsqol.stats.StatsCache;
+import com.bedwarsqol.stats.UrchinTag;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.AbstractClientPlayer;
 import net.minecraft.client.gui.FontRenderer;
@@ -35,8 +38,9 @@ public class NametagStats {
         EntityPlayer self = Minecraft.getMinecraft().thePlayer;
         if (self == null) return;
 
-        boolean statsOn = BedwarsQol.config.playerStats && BedwarsQol.config.playerStatsNametag;
-        if (!statsOn) return;
+        ClientSettings cfg = BedwarsQol.config;
+        // Draw when Player Stats OR the Urchin nametag badge needs this player's identity.
+        if (!UrchinTag.needsNametagIdentity(cfg)) return;
         if (!HypixelContext.isOnHypixel() || !HypixelContext.isInActiveBedwarsGame()) return;
 
         // RenderLivingEvent.Specials.Post fires even when the vanilla name is hidden,
@@ -50,16 +54,30 @@ public class NametagStats {
         if (player.getGameProfile() == null) return;
         java.util.UUID uuid = player.getGameProfile().getId();
         if (uuid == null) return;
+        String name = player.getGameProfile().getName();
+        boolean urchinEligible = cfg.urchinTags
+                && UrchinTag.badgeAllowed(EligibilitySnapshot.current(), name, uuid);
 
         BedwarsStats stats = StatsCache.getCached(uuid);
         if (stats == null) {
-            StatsCache.ensureFetched(uuid, StatsCache.PRIORITY_VISIBLE);
+            StatsCache.ensureFetched(uuid, StatsCache.PRIORITY_VISIBLE, urchinEligible);
             return;
         }
-        String text = stats.formatForNametag(BedwarsModeDetector.current(),
-                BedwarsQol.config.playerStatsShowLevel, BedwarsQol.config.playerStatsShowRank);
-        if (text == null || text.isEmpty()) return;
-        drawStat(player, event, text);
+        if (urchinEligible) StatsCache.ensureFetched(uuid, StatsCache.PRIORITY_VISIBLE, true);
+
+        // Rendering stays per-module: Player Stats off + Urchin on -> only the badge draws.
+        String text = "";
+        if (cfg.playerStats && cfg.playerStatsNametag) {
+            String s = stats.formatForNametag(BedwarsModeDetector.current(),
+                    cfg.playerStatsShowLevel, cfg.playerStatsShowRank);
+            if (s != null) text = s;
+        }
+        if (cfg.urchinTags && cfg.urchinBadgeNametag && urchinEligible) {
+            UrchinTag tag = stats.priorityUrchinTag(System.currentTimeMillis());
+            if (tag != null) text += tag.badgeToken(UrchinAlert.isFusionHighlighted(name));
+        }
+        if (text.isEmpty()) return;
+        drawStat(player, event, text.startsWith(" ") ? text.trim() : text);
     }
 
     private void drawStat(AbstractClientPlayer player, RenderLivingEvent.Post event, String text) {

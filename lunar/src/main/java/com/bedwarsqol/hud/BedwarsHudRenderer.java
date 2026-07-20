@@ -9,36 +9,25 @@ import com.bedwarsqol.gui.render.BedwarsQolFont;
 import com.bedwarsqol.gui.render.GuiBlur;
 import com.bedwarsqol.gui.render.GuiRender;
 import com.bedwarsqol.gui.render.Theme;
-import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.client.gui.FontRenderer;
-import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.RenderHelper;
 import net.minecraft.client.renderer.entity.RenderItem;
 import net.minecraft.init.Items;
-import net.minecraft.item.Item;
 import net.minecraft.item.ItemStack;
-import net.minecraft.potion.Potion;
-import net.minecraft.potion.PotionEffect;
-import net.minecraft.util.ResourceLocation;
-import net.minecraft.util.StatCollector;
 import net.weavemc.api.event.RenderGameOverlayEvent;
 import net.weavemc.api.event.SubscribeEvent;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 
 public class BedwarsHudRenderer {
 
-    public static final String POTION_HUD = "potion";
-    public static final String ARMOR_HUD = "armor";
     public static final String INVENTORY_HUD = "inventory";
     public static final String DIAMOND_TIMER_HUD = "diamondtimer";
     public static final String EMERALD_TIMER_HUD = "emeraldtimer";
-    public static final String KEYSTROKES_HUD = "keystrokes";
     private static final int INV_COLS = 9;
     private static final int INV_ROWS = 3; // storage rows only — the hotbar is already on screen
     // Inventory grid geometry (local pre-scale units). ONE gutter value (INV_GAP) is used everywhere:
@@ -59,28 +48,13 @@ public class BedwarsHudRenderer {
     private static final float[] ANCHOR_X = {0f, 0.5f, 1f, 0f, 0.5f, 1f, 0f, 0.5f, 1f};
     private static final float[] ANCHOR_Y = {0f, 0f, 0f, 0.5f, 0.5f, 0.5f, 1f, 1f, 1f};
 
-    private static final String[] ROMAN = {"I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"};
-    private static final ResourceLocation INVENTORY_TEXTURE = new ResourceLocation("textures/gui/container/inventory.png");
     private static final float TEXT_HEIGHT = 9f;
     private static final float LINE_GAP = 2f;
     private static final float SECONDARY_SCALE = 0.75f;
     private static final float SECONDARY_GAP = 2f;
-    private static final float POTION_ICON_SIZE = 18f;
     private static final float POTION_ICON_TIMER_GAP = 3f;
-    private static final float ARMOR_ICON_SIZE = 16f;
+    private static final float ICON_SIZE = 16f;
     private static final int TEXT_COLOR = 0xFFFFFFFF;
-
-    // Keystrokes: WASD over a spacebar, as rounded grayscale key caps that invert when pressed.
-    // Geometry is in local units (multiplied by the HUD scale at draw time).
-    private static final float KS_UNIT = 18f;     // square key cap side
-    private static final float KS_GAP = 2f;       // gap between caps
-    private static final float KS_SPACE_H = 14f;  // spacebar height (a bit shorter than the WASD caps)
-    private static final float KS_LETTER = 1.0f;  // letter scale within a cap
-    // Qualified ref (HUD_BG_FILL is declared further down) — tracks the (now darker) HUD background panel.
-    private static final int KS_FILL_OFF = BedwarsHudRenderer.HUD_BG_FILL;  // idle cap over the world
-    private static final int KS_FILL_ON = 0x40FFFFFF;        // subtle highlight cap (pressed)
-    private static final int KS_TEXT_OFF = 0xFFEDEDED;   // light letter on dark cap
-    private static final int KS_TEXT_ON = 0xFFFFFFFF;    // letter brightens when pressed
 
     // ----- Optional per-module "Background" panel -----
     // A flat, square-cornered translucent dark panel behind a HUD element (no border, no corner
@@ -111,12 +85,9 @@ public class BedwarsHudRenderer {
         hudVanillaFont = cfg.hudFont == 1;
 
         List<HudBox> boxes = new ArrayList<>(8);
-        addBox(boxes, potionBox(mc, cfg, example));
-        addBox(boxes, armorBox(mc, cfg, example));
         addBox(boxes, inventoryBox(mc, cfg, example));
         addBox(boxes, timerBox(mc, cfg, example, true));
         addBox(boxes, timerBox(mc, cfg, example, false));
-        addBox(boxes, keystrokesBox(mc, cfg, example));
         return boxes;
     }
 
@@ -128,15 +99,7 @@ public class BedwarsHudRenderer {
         int anchor = anchorFor(x, y, width, height, screenWidth, screenHeight);
         int storedX = Math.round(x - ANCHOR_X[anchor] * screenWidth + ANCHOR_X[anchor] * width);
         int storedY = Math.round(y - ANCHOR_Y[anchor] * screenHeight + ANCHOR_Y[anchor] * height);
-        if (POTION_HUD.equals(id)) {
-            cfg.potionHudAnchor = anchor;
-            cfg.potionHudX = storedX;
-            cfg.potionHudY = storedY;
-        } else if (ARMOR_HUD.equals(id)) {
-            cfg.armorHudAnchor = anchor;
-            cfg.armorHudX = storedX;
-            cfg.armorHudY = storedY;
-        } else if (INVENTORY_HUD.equals(id)) {
+        if (INVENTORY_HUD.equals(id)) {
             cfg.inventoryHudAnchor = anchor;
             cfg.inventoryHudX = storedX;
             cfg.inventoryHudY = storedY;
@@ -148,21 +111,14 @@ public class BedwarsHudRenderer {
             cfg.emeraldTimerHudAnchor = anchor;
             cfg.emeraldTimerHudX = storedX;
             cfg.emeraldTimerHudY = storedY;
-        } else if (KEYSTROKES_HUD.equals(id)) {
-            cfg.keystrokesHudAnchor = anchor;
-            cfg.keystrokesHudX = storedX;
-            cfg.keystrokesHudY = storedY;
         }
     }
 
     private static void render(Minecraft mc, ClientSettings cfg, boolean example) {
         hudVanillaFont = cfg.hudFont == 1;
-        if (cfg.potionStatusEnabled) drawPotionHud(mc, cfg, example);
-        if (cfg.armorTypeEnabled) drawArmorHud(mc, cfg, example);
         drawInventoryHud(mc, cfg, example);
         drawTimerHud(mc, cfg, example, true);
         drawTimerHud(mc, cfg, example, false);
-        if (cfg.keystrokesEnabled) drawKeystrokesHud(mc, cfg, example);
     }
 
     /**
@@ -184,12 +140,12 @@ public class BedwarsHudRenderer {
     }
 
     /**
-     * Per-row background chips for an icon-mode HUD (Potions / Gen Timers): one rounded panel hugging
+     * Per-row background chips for an icon-mode HUD (Gen Timers): one rounded panel hugging
      * each row's number text — never a single connected column. Each chip wraps that row's actual drawn
      * glyphs (measured in the BOLD weight the numbers render with) with compact, even padding, vertically
      * centred on the visible glyph band so it sits dead-centre on the icon row at any scale and font.
      *
-     * <p>Geometry mirrors the text draws ({@link #drawPotionImages} / {@link #drawIconCounts}) exactly:
+     * <p>Geometry mirrors the text draws ({@link #drawIconCounts}) exactly:
      * origin {@code tx = box.x + iconSize + gap}, per-row {@code ty = box.y + i*lineStep + (iconSize-9)/2}.
      * {@code bandTop}/{@code bandH} come from the active font so the chip hugs the ink (cap-top → digit
      * baseline), not the 9px line cell — Inter via capTop/capHeight (digits overshoot 'H' by one atlas
@@ -219,44 +175,6 @@ public class BedwarsHudRenderer {
         }
     }
 
-    private static void drawPotionHud(Minecraft mc, ClientSettings cfg, boolean example) {
-        HudBox box = potionBox(mc, cfg, example);
-        if (box == null) return;
-        if (cfg.hudDisplayMode == 1) {
-            List<PotionEntry> entries = potionEntries(mc, example);
-            if (entries.isEmpty()) return;
-            if (cfg.potionBackgroundEnabled) {
-                // One compact chip per effect, hugging that timer's digits — never a single connected panel.
-                List<String> timers = new ArrayList<>(entries.size());
-                for (PotionEntry e : entries) timers.add(e.timer);
-                drawTextBgChips(box, POTION_ICON_SIZE, timers, cfg.potionHudScale);
-            }
-            drawPotionImages(mc, cfg, entries, box.x, box.y);
-            return;
-        }
-
-        if (cfg.potionBackgroundEnabled) drawHudBackground(box, cfg.potionHudScale); // text mode: one panel behind the lines
-        List<Line> lines = potionLines(mc, example);
-        if (!lines.isEmpty()) drawLines(mc.fontRendererObj, lines, box.x, box.y, cfg.potionHudScale);
-    }
-
-    private static void drawArmorHud(Minecraft mc, ClientSettings cfg, boolean example) {
-        HudBox box = armorBox(mc, cfg, example);
-        if (box == null) return;
-        ItemStack leggings = currentLeggings(mc, example);
-        if (leggings == null) return;
-
-        if (cfg.hudDisplayMode == 1) {
-            drawArmorIcon(mc, cfg, leggings, box.x, box.y);
-            return;
-        }
-
-        String name = materialName(leggings.getItem());
-        if (name != null) {
-            drawLines(mc.fontRendererObj, Collections.singletonList(new Line(name)), box.x, box.y, cfg.armorHudScale);
-        }
-    }
-
     private static void drawLines(FontRenderer fr, List<Line> lines, float x, float y, float scale) {
         if (fr == null || lines.isEmpty()) return;
         float textHeight = TEXT_HEIGHT * scale;
@@ -274,58 +192,6 @@ public class BedwarsHudRenderer {
                 drawScaledString(fr, line.secondary, secX, ly + secondaryYOffset, secondaryScale);
             }
         }
-    }
-
-    private static void drawPotionImages(Minecraft mc, ClientSettings cfg, List<PotionEntry> entries, float x, float y) {
-        float scale = cfg.potionHudScale;
-        float iconSize = POTION_ICON_SIZE * scale;
-        float lineStep = iconSize + LINE_GAP * scale;
-        float timerScale = scale; // match the gen-timer numbers (full scale, not the smaller secondary)
-        float gap = POTION_ICON_TIMER_GAP * scale;
-
-        mc.getTextureManager().bindTexture(INVENTORY_TEXTURE);
-        GlStateManager.color(1f, 1f, 1f, 1f);
-        GlStateManager.enableTexture2D();
-        for (int i = 0; i < entries.size(); i++) {
-            PotionEntry entry = entries.get(i);
-            int idx = entry.potion.getStatusIconIndex();
-            if (idx < 0) continue;
-
-            GlStateManager.pushMatrix();
-            GlStateManager.translate(x, y + i * lineStep, 0f);
-            GlStateManager.scale(scale, scale, 1f);
-            Gui.drawModalRectWithCustomSizedTexture(0, 0, idx % 8 * 18, 198 + idx / 8 * 18, 18, 18, 256f, 256f);
-            GlStateManager.popMatrix();
-        }
-
-        FontRenderer fr = mc.fontRendererObj;
-        if (fr != null) {
-            for (int i = 0; i < entries.size(); i++) {
-                float ty = y + i * lineStep + (iconSize - TEXT_HEIGHT * timerScale) / 2f;
-                drawScaledString(fr, entries.get(i).timer, x + iconSize + gap, ty, timerScale);
-            }
-        }
-        resetGlState();
-    }
-
-    private static void drawArmorIcon(Minecraft mc, ClientSettings cfg, ItemStack stack, float x, float y) {
-        RenderItem renderItem = mc.getRenderItem();
-        if (renderItem == null) return;
-
-        GlStateManager.pushMatrix();
-        GlStateManager.enableDepth();
-        GlStateManager.enableRescaleNormal();
-        RenderHelper.enableGUIStandardItemLighting();
-        GlStateManager.translate(x, y, 0f);
-        GlStateManager.scale(cfg.armorHudScale, cfg.armorHudScale, 1f);
-        float prevZ = renderItem.zLevel;
-        renderItem.zLevel = 200f;
-        renderItem.renderItemIntoGUI(stack, 0, 0);
-        renderItem.zLevel = prevZ;
-        RenderHelper.disableStandardItemLighting();
-        GlStateManager.disableRescaleNormal();
-        GlStateManager.popMatrix();
-        resetGlState();
     }
 
     // ----- HUD font: modern Inter atlas (default) or the vanilla Minecraft font, chosen in Settings -----
@@ -368,63 +234,6 @@ public class BedwarsHudRenderer {
         fontDraw(text, x, y, scale, TEXT_COLOR, BedwarsQolFont.Weight.BOLD);
     }
 
-    private static Size potionSize(Minecraft mc, ClientSettings cfg, boolean example) {
-        if (cfg.hudDisplayMode == 1) {
-            List<PotionEntry> entries = potionEntries(mc, example);
-            if (entries.isEmpty()) return Size.EMPTY;
-
-            float maxTextWidth = 0f;
-            FontRenderer fr = mc.fontRendererObj;
-            if (fr != null) {
-                for (PotionEntry entry : entries) {
-                    maxTextWidth = Math.max(maxTextWidth, fontWidth(entry.timer) * cfg.potionHudScale);
-                }
-            }
-            float width = POTION_ICON_SIZE * cfg.potionHudScale + POTION_ICON_TIMER_GAP * cfg.potionHudScale + maxTextWidth;
-            float height = entries.size() * (POTION_ICON_SIZE * cfg.potionHudScale)
-                    + Math.max(0, entries.size() - 1) * (LINE_GAP * cfg.potionHudScale);
-            return new Size(width, height);
-        }
-
-        List<Line> lines = potionLines(mc, example);
-        return textSize(mc.fontRendererObj, lines, cfg.potionHudScale);
-    }
-
-    private static Size armorSize(Minecraft mc, ClientSettings cfg, boolean example) {
-        ItemStack leggings = currentLeggings(mc, example);
-        if (leggings == null) return Size.EMPTY;
-        if (cfg.hudDisplayMode == 1) {
-            float size = ARMOR_ICON_SIZE * cfg.armorHudScale;
-            return new Size(size, size);
-        }
-
-        String name = materialName(leggings.getItem());
-        if (name == null) return Size.EMPTY;
-        return textSize(mc.fontRendererObj, Collections.singletonList(new Line(name)), cfg.armorHudScale);
-    }
-
-    private static HudBox potionBox(Minecraft mc, ClientSettings cfg, boolean example) {
-        if (!cfg.potionStatusEnabled) return null;
-        if (cfg.potionInGameOnly && !bedwarsActive(example)) return null;
-        Size size = potionSize(mc, cfg, example);
-        if (size.width <= 0f || size.height <= 0f) return null;
-        ScaledResolution resolution = new ScaledResolution(mc);
-        float x = absoluteX(cfg.potionHudX, cfg.potionHudAnchor, size.width, resolution.getScaledWidth());
-        float y = absoluteY(cfg.potionHudY, cfg.potionHudAnchor, size.height, resolution.getScaledHeight());
-        return new HudBox(POTION_HUD, "Potion HUD", x, y, size.width, size.height);
-    }
-
-    private static HudBox armorBox(Minecraft mc, ClientSettings cfg, boolean example) {
-        if (!cfg.armorTypeEnabled) return null;
-        if (cfg.armorInGameOnly && !bedwarsActive(example)) return null;
-        Size size = armorSize(mc, cfg, example);
-        if (size.width <= 0f || size.height <= 0f) return null;
-        ScaledResolution resolution = new ScaledResolution(mc);
-        float x = absoluteX(cfg.armorHudX, cfg.armorHudAnchor, size.width, resolution.getScaledWidth());
-        float y = absoluteY(cfg.armorHudY, cfg.armorHudAnchor, size.height, resolution.getScaledHeight());
-        return new HudBox(ARMOR_HUD, "Armor HUD", x, y, size.width, size.height);
-    }
-
     private static float absoluteX(float storedX, int anchor, float width, float screenWidth) {
         int safeAnchor = Math.max(0, Math.min(8, anchor));
         return storedX + ANCHOR_X[safeAnchor] * screenWidth - ANCHOR_X[safeAnchor] * width;
@@ -460,63 +269,6 @@ public class BedwarsHudRenderer {
         return new Size(width, height);
     }
 
-    private static List<Line> potionLines(Minecraft mc, boolean example) {
-        if (example) {
-            List<Line> out = new ArrayList<>(2);
-            out.add(new Line("Jump Boost I", "0:38"));
-            out.add(new Line("Speed II", "1:24"));
-            return out;
-        }
-
-        Collection<PotionEffect> active = mc.thePlayer.getActivePotionEffects();
-        if (active.isEmpty()) return Collections.emptyList();
-
-        List<Line> lines = new ArrayList<>(active.size());
-        for (PotionEffect eff : active) {
-            Potion potion = potionFor(eff);
-            if (potion == null) continue;
-            String name = StatCollector.translateToLocal(potion.getName());
-            String timer = eff.getIsPotionDurationMax() ? "**:**" : formatTimer(eff.getDuration());
-            lines.add(new Line(name + " " + romanNumeral(eff.getAmplifier()), timer));
-        }
-        lines.sort((a, b) -> Float.compare(lineWidth(mc.fontRendererObj, b), lineWidth(mc.fontRendererObj, a)));
-        return lines;
-    }
-
-    private static List<PotionEntry> potionEntries(Minecraft mc, boolean example) {
-        if (example) {
-            List<PotionEntry> out = new ArrayList<>(2);
-            out.add(new PotionEntry(Potion.jump, "0:38"));
-            out.add(new PotionEntry(Potion.moveSpeed, "1:24"));
-            return out;
-        }
-
-        Collection<PotionEffect> active = mc.thePlayer.getActivePotionEffects();
-        if (active.isEmpty()) return Collections.emptyList();
-
-        List<PotionEntry> entries = new ArrayList<>(active.size());
-        for (PotionEffect eff : active) {
-            Potion potion = potionFor(eff);
-            if (potion == null) continue;
-            String timer = eff.getIsPotionDurationMax() ? "**:**" : formatTimer(eff.getDuration());
-            entries.add(new PotionEntry(potion, timer));
-        }
-        return entries;
-    }
-
-    private static ItemStack currentLeggings(Minecraft mc, boolean example) {
-        if (example) return new ItemStack(Items.diamond_leggings);
-        ItemStack leggings = mc.thePlayer.inventory.armorInventory[1];
-        if (leggings == null) return null;
-        return materialName(leggings.getItem()) == null ? null : leggings;
-    }
-
-    private static Potion potionFor(PotionEffect eff) {
-        int id = eff.getPotionID();
-        if (id < 0 || id >= Potion.potionTypes.length) return null;
-        return Potion.potionTypes[id];
-    }
-
     private static float lineWidth(FontRenderer fr, Line line) {
         if (fr == null) return 0f;
         float width = fontWidth(line.primary);
@@ -524,27 +276,6 @@ public class BedwarsHudRenderer {
             width += SECONDARY_GAP + fontWidth(line.secondary) * SECONDARY_SCALE;
         }
         return width;
-    }
-
-    private static String romanNumeral(int amplifier) {
-        int level = amplifier + 1;
-        if (level >= 1 && level <= 10) return ROMAN[level - 1];
-        return String.valueOf(level);
-    }
-
-    private static String formatTimer(int durationTicks) {
-        int seconds = durationTicks / 20;
-        if (seconds < 60) return seconds + "s";
-        return (seconds / 60) + ":" + String.format("%02d", seconds % 60);
-    }
-
-    private static String materialName(Item item) {
-        if (item == Items.iron_leggings) return "Iron";
-        if (item == Items.diamond_leggings) return "Diamond";
-        if (item == Items.golden_leggings) return "Gold";
-        if (item == Items.leather_leggings) return "Leather";
-        if (item == Items.chainmail_leggings) return "Chainmail";
-        return null;
     }
 
     // ----- BedWars HUDs (mini inventory, diamond/emerald spawn timers) -----
@@ -694,7 +425,7 @@ public class BedwarsHudRenderer {
         if (cfg.genTimersBackgroundEnabled) {
             // Icon mode: one chip hugging the countdown digits (not the gem icon). Text mode is all text.
             if (cfg.hudDisplayMode == 1)
-                drawTextBgChips(box, ARMOR_ICON_SIZE, Collections.singletonList(timerValue(example, diamond)), scale);
+                drawTextBgChips(box, ICON_SIZE, Collections.singletonList(timerValue(example, diamond)), scale);
             else drawHudBackground(box, scale);
         }
         if (cfg.hudDisplayMode == 1) {
@@ -719,87 +450,10 @@ public class BedwarsHudRenderer {
         return s < 0 ? "--" : s + "s";
     }
 
-    // ----- Keystrokes (WASD + spacebar) -----
-
-    private static HudBox keystrokesBox(Minecraft mc, ClientSettings cfg, boolean example) {
-        if (!cfg.keystrokesEnabled) return null;
-        if (cfg.keystrokesInGameOnly && !bedwarsActive(example)) return null;
-        float scale = cfg.keystrokesHudScale;
-        float width = (3f * KS_UNIT + 2f * KS_GAP) * scale;
-        float height = (2f * KS_UNIT + 2f * KS_GAP + KS_SPACE_H) * scale;
-        ScaledResolution r = new ScaledResolution(mc);
-        float x = absoluteX(cfg.keystrokesHudX, cfg.keystrokesHudAnchor, width, r.getScaledWidth());
-        float y = absoluteY(cfg.keystrokesHudY, cfg.keystrokesHudAnchor, height, r.getScaledHeight());
-        return new HudBox(KEYSTROKES_HUD, "Keystrokes", x, y, width, height);
-    }
-
-    private static void drawKeystrokesHud(Minecraft mc, ClientSettings cfg, boolean example) {
-        HudBox box = keystrokesBox(mc, cfg, example);
-        if (box == null) return;
-        boolean[] st = keyStates(mc, example);
-        // Translucent-dark idle caps over the world; pressed caps brighten.
-        int idleFill = KS_FILL_OFF;
-
-        // Draw everything in local (unscaled) coordinates under one translate+scale, so the caps and
-        // letters scale together through the modelview matrix.
-        GlStateManager.pushMatrix();
-        GlStateManager.translate(box.x, box.y, 0f);
-        GlStateManager.scale(cfg.keystrokesHudScale, cfg.keystrokesHudScale, 1f);
-
-        float col = KS_UNIT + KS_GAP;
-        float row2 = KS_UNIT + KS_GAP;
-        float row3 = row2 + KS_UNIT + KS_GAP;
-        drawKeyCap(col, 0f, KS_UNIT, KS_UNIT, "W", st[0], idleFill);
-        drawKeyCap(0f, row2, KS_UNIT, KS_UNIT, "A", st[1], idleFill);
-        drawKeyCap(col, row2, KS_UNIT, KS_UNIT, "S", st[2], idleFill);
-        drawKeyCap(2f * col, row2, KS_UNIT, KS_UNIT, "D", st[3], idleFill);
-        float spaceW = 3f * KS_UNIT + 2f * KS_GAP;
-        drawKeyCap(0f, row3, spaceW, KS_SPACE_H, "", st[4], idleFill);
-        drawSpaceSymbol(0f, row3, spaceW, KS_SPACE_H, st[4]);
-
-        GlStateManager.popMatrix();
-        resetGlState();
-    }
-
-    private static void drawKeyCap(float x, float y, float w, float h, String label, boolean pressed, int idleFill) {
-        float radius = Math.min(3f, Math.min(w, h) * 0.25f);
-        GuiRender.roundedRect(x, y, x + w, y + h, radius, pressed ? KS_FILL_ON : idleFill);
-        if (!label.isEmpty()) {
-            float tw = fontWidth(label) * KS_LETTER;
-            float tx = x + (w - tw) / 2f;
-            float ty = y + (h - fontHeight(KS_LETTER)) / 2f;
-            fontDraw(label, tx, ty, KS_LETTER, pressed ? KS_TEXT_ON : KS_TEXT_OFF, BedwarsQolFont.Weight.BOLD);
-        }
-    }
-
-    /** A centered horizontal bar (thin, square corners) standing in for the space key's label. */
-    private static void drawSpaceSymbol(float x, float y, float w, float h, boolean pressed) {
-        float barW = w * 0.34f;
-        float barH = Math.max(1f, h * 0.045f);
-        float bx1 = x + (w - barW) / 2f;
-        float by1 = y + (h - barH) / 2f;
-        GuiRender.rect(bx1, by1, bx1 + barW, by1 + barH, pressed ? KS_TEXT_ON : KS_TEXT_OFF);
-    }
-
-    /** {W, A, S, D, Space} held state, following the player's actual movement binds. */
-    private static boolean[] keyStates(Minecraft mc, boolean example) {
-        if (example || mc.gameSettings == null) return new boolean[]{true, false, false, false, false};
-        return new boolean[]{
-                isDown(mc.gameSettings.keyBindForward),
-                isDown(mc.gameSettings.keyBindLeft),
-                isDown(mc.gameSettings.keyBindBack),
-                isDown(mc.gameSettings.keyBindRight),
-                isDown(mc.gameSettings.keyBindJump)};
-    }
-
-    private static boolean isDown(KeyBinding kb) {
-        return kb != null && kb.isKeyDown();
-    }
-
     private static void drawIconCounts(Minecraft mc, List<IconCount> entries, float x, float y, float scale) {
         if (entries.isEmpty()) return;
         RenderItem ri = mc.getRenderItem();
-        float iconSize = ARMOR_ICON_SIZE * scale;
+        float iconSize = ICON_SIZE * scale;
         float lineStep = iconSize + LINE_GAP * scale;
         float gap = POTION_ICON_TIMER_GAP * scale;
 
@@ -837,7 +491,7 @@ public class BedwarsHudRenderer {
 
     private static Size iconCountsSize(Minecraft mc, List<IconCount> entries, float scale) {
         if (entries.isEmpty()) return Size.EMPTY;
-        float iconSize = ARMOR_ICON_SIZE * scale;
+        float iconSize = ICON_SIZE * scale;
         float gap = POTION_ICON_TIMER_GAP * scale;
         float maxText = 0f;
         FontRenderer fr = mc.fontRendererObj;
@@ -919,16 +573,6 @@ public class BedwarsHudRenderer {
         Line(String primary, String secondary) {
             this.primary = primary;
             this.secondary = secondary == null ? "" : secondary;
-        }
-    }
-
-    private static final class PotionEntry {
-        final Potion potion;
-        final String timer;
-
-        PotionEntry(Potion potion, String timer) {
-            this.potion = potion;
-            this.timer = timer;
         }
     }
 

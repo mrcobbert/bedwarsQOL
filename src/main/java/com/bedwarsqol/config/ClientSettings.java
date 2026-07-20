@@ -1,5 +1,6 @@
 package com.bedwarsqol.config;
 
+import com.bedwarsqol.gui.render.GuiTheme;
 import org.lwjgl.input.Keyboard;
 
 import java.util.Locale;
@@ -13,8 +14,8 @@ public class ClientSettings {
     public int hudFont = 0;
     /** Size of the settings GUI panel. 0 = small, 1 = medium, 2 = large. */
     public int guiSize = 2;
-    /** Selected module-card colour theme (index into SettingsGui.THEMES; 0 = default grayscale, no change). */
-    public int moduleTheme = 0;
+    /** GUI accent color token: orange (default) / red / blue / green. Drives only the settings-GUI accent; HUD stays neutral. */
+    public String guiAccent = "orange";
 
     public boolean potionStatusEnabled = true;
     /** Only render this HUD while in an active BedWars game (off = render everywhere). */
@@ -97,6 +98,34 @@ public class ClientSettings {
      */
     public boolean chatPlayerHeads = false;
 
+    // --- Chat module ---
+
+    /** Unlimited Chat: raise the vanilla 100-line chat history cap to 32,767 lines. */
+    public boolean chatUnlimited = false;
+    /**
+     * Keep Chat History: stop the return to the main menu (server switches, disconnects) from wiping
+     * chat within a session. F3+D still clears; nothing is written to disk.
+     */
+    public boolean chatKeepHistory = false;
+    /** Stack Spam Messages: collapse consecutive identical chat lines into one line with a gray (xN). */
+    public boolean chatStackSpam = false;
+    /** Sub of Stack Spam: only stack when the repeat arrives within {@link #chatStackWindowSec} of the last. */
+    public boolean chatStackTimeBased = true;
+    /** Seconds a line stays stackable when time-based stacking is on (1-30). */
+    public float chatStackWindowSec = 5.0f;
+    /** Sub of Stack Spam: blank lines never stack and never break a stacking chain. */
+    public boolean chatStackIgnoreBlanks = true;
+    /** Chat Notifications: master toggle for the chat-driven sound alerts below. */
+    public boolean chatNotifications = false;
+    /** Sub: pling when another player's typed message contains your name (whole word). */
+    public boolean chatNotifyMention = true;
+    /** Sub: double pling when a teammate or party member says "inc"/"incoming" in an active Bedwars game. */
+    public boolean chatNotifyInc = true;
+    /** Copy Chat: right-click a chat line while chat is open to copy the full message to the clipboard. */
+    public boolean chatCopy = false;
+    /** Send INC keybind: the "Send /pc INC" key (Controls menu) sends /pc INC with a 2s cooldown. */
+    public boolean pcIncKey = true;
+
     /**
      * Cheater Detector: master toggle for the passive observer-side checks (see
      * {@link com.bedwarsqol.anticheat.CheaterDetector}). Off by default. Output is a private local
@@ -132,6 +161,23 @@ public class ClientSettings {
      * default once Nick Utils is enabled.
      */
     public boolean autoDenick = true;
+
+    /**
+     * Urchin Tags: master toggle for community-reported blacklist tags from urchin.ws, resolved
+     * server-side by the stats Worker (see {@link com.bedwarsqol.feature.UrchinAlert}). Off by
+     * default. When off the mod causes zero Urchin traffic and shows no tags.
+     */
+    public boolean urchinTags = false;
+    /** Sub of Urchin Tags: append the priority tag badge to the tab-list overlay. */
+    public boolean urchinBadgeTab = true;
+    /** Sub of Urchin Tags: one private chat line the first time a tagged player is seen each game. */
+    public boolean urchinChatAlert = true;
+    /** Sub of Urchin Tags: play a pling with the chat alert (cheater-type tags only). */
+    public boolean urchinAlertSound = true;
+    /** Sub of Urchin Tags: append the priority tag badge above the in-game nametag. */
+    public boolean urchinBadgeNametag = true;
+    /** Sub of Urchin Tags: fuse a tag with live Cheater Detector flags into one red alert + badge. */
+    public boolean urchinAcFusion = true;
 
     // Stats come from a Cloudflare Worker that each user self-hosts (see server/stats-worker). No
     // public backend is shipped — never commit a real URL or token here. Users set their own via
@@ -182,22 +228,13 @@ public class ClientSettings {
     public int styledTabListSize = 2;
     /** Hide the server-sent header/footer text above and below the tab player list. */
     public boolean tabHideHeaderFooter = false;
-    /** Show each player's latency as a number ("123ms") in the tab list instead of the vanilla signal-bar icon. */
-    public boolean tabNumericPing = true;
-
-    // --- Debug ---
-
-    /** Spawn clientside "Test Dummy" practice players with a keybind (real hittable entities in singleplayer). */
-    public boolean dummyEnabled = false;
-    /** Key that spawns a dummy at the block you're looking at (default unbound). */
-    public int dummySpawnKeyCode = Keyboard.KEY_NONE;
 
     public void sanitize() {
         defaultTextSize = clamp(defaultTextSize, 0, 2);
         hudDisplayMode = clamp(hudDisplayMode, 0, 1);
         hudFont = clamp(hudFont, 0, 1);
         guiSize = clamp(guiSize, 0, 2);
-        if (moduleTheme < 0) moduleTheme = 0; // upper bound clamped GUI-side against THEMES.length
+        guiAccent = GuiTheme.normalizeToken(guiAccent);
         potionHudAnchor = clamp(potionHudAnchor, 0, 8);
         armorHudAnchor = clamp(armorHudAnchor, 0, 8);
         if (potionHudScale < 0.3f || potionHudScale > 10.0f) potionHudScale = defaultTextSizeScale();
@@ -217,6 +254,8 @@ public class ClientSettings {
         blockOverlayStyle = clamp(blockOverlayStyle, 0, 2);
         if (blockOverlayLineWidth < 0.5f || blockOverlayLineWidth > 10.0f) blockOverlayLineWidth = 2.0f;
         tntFuseRadius = clamp(tntFuseRadius, 1, 64);
+        chatStackWindowSec = clampf(chatStackWindowSec, 1.0f, 30.0f);
+
         handPosX = clampf(handPosX, -1.0f, 1.0f);
         handPosY = clampf(handPosY, -1.0f, 1.0f);
         handPosZ = clampf(handPosZ, -1.0f, 1.0f);
@@ -229,7 +268,6 @@ public class ClientSettings {
         if (statsBackendToken == null) statsBackendToken = "";
         statsBackendToken = statsBackendToken.trim();
         if (settingsKeyCode < 0) settingsKeyCode = Keyboard.KEY_RSHIFT;
-        if (dummySpawnKeyCode < 0) dummySpawnKeyCode = Keyboard.KEY_NONE;
     }
 
     /** Coerce {@link #chatStatsMode} to a known token, defaulting anything unrecognised to "auto". */

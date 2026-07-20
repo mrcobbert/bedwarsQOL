@@ -1,5 +1,8 @@
 package com.bedwarsqol.stats;
 
+import java.util.Collections;
+import java.util.List;
+
 public final class BedwarsStats {
 
     public enum State { OK, NEVER_PLAYED, NICKED, ERROR }
@@ -61,9 +64,15 @@ public final class BedwarsStats {
     public final int deaths;
     public final double kd;
 
+    /** Community-reported Urchin tags (in-memory only, never persisted); unmodifiable, never null. */
+    public final List<UrchinTag> urchinTags;
+
     private BedwarsStats(State state, String displayName, int networkLevel, int bedwarsLevel,
                          String rankPrefix, ModeStats overall, ModeStats solo, ModeStats doubles,
-                         ModeStats threes, ModeStats fours) {
+                         ModeStats threes, ModeStats fours, List<UrchinTag> urchinTags) {
+        this.urchinTags = urchinTags == null
+                ? Collections.<UrchinTag>emptyList()
+                : Collections.unmodifiableList(new java.util.ArrayList<UrchinTag>(urchinTags));
         this.state = state;
         this.displayName = displayName;
         this.networkLevel = Math.max(0, networkLevel);
@@ -87,22 +96,33 @@ public final class BedwarsStats {
     }
 
     public static BedwarsStats nicked() {
-        return new BedwarsStats(State.NICKED, null, 0, 0, "", null, null, null, null, null);
+        return new BedwarsStats(State.NICKED, null, 0, 0, "", null, null, null, null, null, null);
     }
 
     public static BedwarsStats error() {
-        return new BedwarsStats(State.ERROR, null, 0, 0, "", null, null, null, null, null);
+        return new BedwarsStats(State.ERROR, null, 0, 0, "", null, null, null, null, null, null);
     }
 
     public static BedwarsStats neverPlayed(String displayName) {
-        return new BedwarsStats(State.NEVER_PLAYED, displayName, 0, 0, "", null, null, null, null, null);
+        return new BedwarsStats(State.NEVER_PLAYED, displayName, 0, 0, "", null, null, null, null, null, null);
     }
 
     public static BedwarsStats ok(String displayName, int networkLevel, int bedwarsLevel, String rankPrefix,
                                   ModeStats overall, ModeStats solo, ModeStats doubles,
                                   ModeStats threes, ModeStats fours) {
         return new BedwarsStats(State.OK, displayName, networkLevel, bedwarsLevel, rankPrefix,
-                overall, solo, doubles, threes, fours);
+                overall, solo, doubles, threes, fours, null);
+    }
+
+    /** A copy carrying {@code tags} (Urchin resolution merge). Preserves all stats fields. */
+    public BedwarsStats withUrchinTags(List<UrchinTag> tags) {
+        return new BedwarsStats(state, displayName, networkLevel, bedwarsLevel, rankPrefix,
+                overall, solo, doubles, threes, fours, tags);
+    }
+
+    /** The highest-severity active Urchin tag at {@code nowMs}, or null when there is none. */
+    public UrchinTag priorityUrchinTag(long nowMs) {
+        return UrchinTag.priority(urchinTags, nowMs);
     }
 
     /**
@@ -113,7 +133,7 @@ public final class BedwarsStats {
     public BedwarsStats withLevel(int level) {
         if (state != State.OK || level <= 0 || level == bedwarsLevel) return this;
         return new BedwarsStats(state, displayName, networkLevel, level, rankPrefix,
-                overall, solo, doubles, threes, fours);
+                overall, solo, doubles, threes, fours, urchinTags);
     }
 
     /** The stats for {@code mode}, falling back to overall when that mode has no games. */

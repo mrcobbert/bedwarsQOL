@@ -25,7 +25,7 @@ public class EditHudGui extends GuiScreen {
     private static final int SNAP_LINE = 0xFFBFBFBF;     // snap guide: light gray
     private static final float RESET_SCALE = 0.65f;      // "Reset HUD Sizes" button label scale (half size)
 
-    private String selectedId = BedwarsHudRenderer.POTION_HUD;
+    private String selectedId = BedwarsHudRenderer.INVENTORY_HUD;
     private boolean dragging;
     private boolean scaling;
     private float dragOffsetX;
@@ -318,27 +318,19 @@ public class EditHudGui extends GuiScreen {
     }
 
     private static float getHudScale(ClientSettings cfg, String id) {
-        if (BedwarsHudRenderer.ARMOR_HUD.equals(id)) return cfg.armorHudScale;
         if (BedwarsHudRenderer.INVENTORY_HUD.equals(id)) return cfg.inventoryHudScale;
         if (BedwarsHudRenderer.DIAMOND_TIMER_HUD.equals(id)) return cfg.diamondTimerHudScale;
         if (BedwarsHudRenderer.EMERALD_TIMER_HUD.equals(id)) return cfg.emeraldTimerHudScale;
-        if (BedwarsHudRenderer.KEYSTROKES_HUD.equals(id)) return cfg.keystrokesHudScale;
-        return cfg.potionHudScale;
+        return cfg.inventoryHudScale;
     }
 
     private static void setHudScale(ClientSettings cfg, String id, float scale) {
-        if (BedwarsHudRenderer.POTION_HUD.equals(id)) {
-            cfg.potionHudScale = scale;
-        } else if (BedwarsHudRenderer.ARMOR_HUD.equals(id)) {
-            cfg.armorHudScale = scale;
-        } else if (BedwarsHudRenderer.INVENTORY_HUD.equals(id)) {
+        if (BedwarsHudRenderer.INVENTORY_HUD.equals(id)) {
             cfg.inventoryHudScale = scale;
         } else if (BedwarsHudRenderer.DIAMOND_TIMER_HUD.equals(id)) {
             cfg.diamondTimerHudScale = scale;
         } else if (BedwarsHudRenderer.EMERALD_TIMER_HUD.equals(id)) {
             cfg.emeraldTimerHudScale = scale;
-        } else if (BedwarsHudRenderer.KEYSTROKES_HUD.equals(id)) {
-            cfg.keystrokesHudScale = scale;
         }
     }
 

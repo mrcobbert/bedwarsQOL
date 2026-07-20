@@ -1,0 +1,32 @@
+# OWNER deployment config - identical to wrangler.toml but with the owner's STATS_KV
+# binding enabled. Urchin data/key routes are deliberately inert without STATS_KV, so the
+# owner MUST deploy with: npm run deploy:owner  (a plain `wrangler deploy` would strip the
+# binding and silently disable Urchin). The namespace id is not a secret; it only exists in
+# the owner's Cloudflare account. Third parties keep using wrangler.toml.
+name = "bedwarsqol-stats"
+main = "src/worker.js"
+compatibility_date = "2024-11-01"
+workers_dev = true
+preview_urls = true
+
+# Run the Worker near hypixel.net (it makes many same-origin subrequests), trimming per-scrape
+# latency. Takes ~15 min to take effect after deploy and only routes to colos it has run in.
+[placement]
+mode = "smart"
+
+# Global L2 cache (Tier 2). OFF by default so anyone can deploy to their own Cloudflare account —
+# a KV binding must reference a namespace that exists in THAT account, and a hardcoded id from
+# someone else's account makes `wrangler deploy` fail. The Worker degrades to the per-colo
+# caches.default when this binding is absent, so leaving it off just means no cross-colo L2 cache.
+# To enable it on your own account, create a namespace and uncomment the three lines with your id:
+#   wrangler kv namespace create STATS_KV
+[[kv_namespaces]]
+binding = "STATS_KV"
+id = "16fd5eea0e37475c91e5f255d45d82ce"
+
+# Optional: uncomment to re-run edge probe via `wrangler tail` (see README)
+# [triggers]
+# crons = ["0 12 * * *"]
+
+# Optional: set after first deploy, e.g. WORKER_URL=https://bedwarsqol-stats.<subdomain>.workers.dev
+# Used by: npm run test:worker

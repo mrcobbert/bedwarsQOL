@@ -5,6 +5,7 @@ import com.bedwarsqol.config.ClientSettings;
 import com.bedwarsqol.feature.ChatNameTags;
 import com.bedwarsqol.feature.ModChat;
 import com.bedwarsqol.gui.SettingsGui;
+import com.bedwarsqol.stats.StatsCache;
 import net.minecraft.client.Minecraft;
 import net.minecraft.command.CommandBase;
 import net.minecraft.command.ICommandSender;
@@ -90,6 +91,12 @@ public class BedwarsQolCommand extends CommandBase {
             case "stats":
                 BedwarsStatsCommand.showStats(Arrays.copyOfRange(args, 1, args.length));
                 return;
+            case "urchin":
+                handleUrchin(sender, args);
+                return;
+            case "urchinkey":
+                handleUrchinKey(sender, args);
+                return;
             default:
                 // A non-reserved first token is a player name → stats card.
                 BedwarsStatsCommand.showStats(args);
@@ -126,6 +133,8 @@ public class BedwarsQolCommand extends CommandBase {
         send(sender, "§f/bw mode <auto|all|solo|2s|3s|4s> §7— chat FKDR gamemode");
         send(sender, "§f/bw statsurl <url> §7— set the stats backend");
         send(sender, "§f/bw statstoken <token> §7— set the backend token");
+        send(sender, "§f/bw urchin <player> §7— community Urchin tags for a player");
+        send(sender, "§f/bw urchinkey <key|clear> §7— set the server-side Urchin key");
         send(sender, "§f/bw help §7— this page");
         send(sender, "§7§m------------------------------");
     }
@@ -171,6 +180,182 @@ public class BedwarsQolCommand extends CommandBase {
             case "threes": return "3v3v3v3";
             case "fours": return "4v4v4v4";
             default: return "Auto (per-game)";
+        }
+    }
+
+    private static final java.util.concurrent.ExecutorService URCHIN_EXEC =
+            java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "BedwarsQol-Urchin");
+                t.setDaemon(true);
+                return t;
+            });
+
+    /** {@code /bw urchin <name>} — on-demand community-tag lookup via the Worker's manual route. */
+    private void handleUrchin(ICommandSender sender, String[] args) {
+        ClientSettings cfg = settings();
+        if (!cfg.urchinTags) {
+            send(sender, "§cUrchin Tags is disabled. Enable it in /bw.");
+            return;
+        }
+        if (args.length < 2 || args[1].trim().isEmpty()) {
+            send(sender, "§eUsage: §f/bw urchin <player>");
+            return;
+        }
+        final String name = args[1].trim();
+        final String url = cfg.statsBackendUrl;
+        final String token = cfg.statsBackendToken;
+        if (url == null || url.trim().isEmpty()) {
+            send(sender, "§cNo stats backend URL. Set §f/bw statsurl <url>§c.");
+            return;
+        }
+        send(sender, "§7Looking up Urchin tags for §f" + name + "§7...");
+        URCHIN_EXEC.submit(() -> {
+            try {
+                com.bedwarsqol.stats.ScraperBackendClient.UrchinLookup r =
+                        com.bedwarsqol.stats.ScraperBackendClient.getUrchin(url, token, name);
+                scheduled(() -> printUrchin(name, r));
+            } catch (Throwable t) {
+                scheduled(() -> send(sender, "§cUrchin lookup failed for §f" + name + "§c."));
+            }
+        });
+    }
+
+    private static void printUrchin(String name, com.bedwarsqol.stats.ScraperBackendClient.UrchinLookup r) {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc == null || mc.thePlayer == null) return;
+        if (r == null || !r.success) {
+            local("§cUrchin unavailable right now.");
+            return;
+        }
+        if (r.notFound) {
+            local("§7No Hypixel player named §f" + name + "§7 was found.");
+            return;
+        }
+        long now = System.currentTimeMillis();
+        java.util.List<com.bedwarsqol.stats.UrchinTag> tags =
+                com.bedwarsqol.stats.UrchinTag.activeTags(r.tags, now);
+        if (tags.isEmpty()) {
+            if (r.unavailable) local("§7Urchin unavailable right now.");
+            else local("§a" + name + " §7has no Urchin tags.");
+            return;
+        }
+        local("§8[§6BWQOL§8] §fUrchin tags for §e" + name + (r.stale ? " §8(cached)" : "") + "§7:");
+        java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        for (com.bedwarsqol.stats.UrchinTag t : tags) {
+            StringBuilder sb = new StringBuilder("  ").append(t.color()).append("[")
+                    .append(t.displayIcon()).append("] §f").append(t.displayName());
+            if (!t.reason.isEmpty()) sb.append(" §7- §f").append(t.reason);
+            if (t.addedOnMs > 0) sb.append(" §8(").append(fmt.format(new java.util.Date(t.addedOnMs))).append(')');
+            local(sb.toString());
+        }
+    }
+
+    /**
+     * {@code /bw urchinkey <key|clear>} — sets/clears the server-side Urchin key. The key never touches
+     * chat history, disk, logs, exceptions, or URLs. The whole handler is guarded so it can never throw.
+     */
+    private void handleUrchinKey(ICommandSender sender, String[] args) {
+        try {
+            // Fail closed: never construct or submit the body unless the raw command line is verified
+            // gone from up-arrow history, or the key would linger there while being posted (B1).
+            if (!scrubUrchinKeyHistory()) {
+                send(sender, "§cCould not clear the command from chat history - key not sent. "
+                        + "Use §fwrangler secret put URCHIN_KEY§c instead.");
+                return;
+            }
+            ClientSettings cfg = settings();
+            final String url = cfg.statsBackendUrl;
+            final String token = cfg.statsBackendToken;
+            if (url == null || url.trim().isEmpty()) {
+                send(sender, "§cNo stats backend URL. Set §f/bw statsurl <url>§c first.");
+                return;
+            }
+            if (args.length < 2 || args[1].trim().isEmpty()) {
+                send(sender, "§eUsage: §f/bw urchinkey <key|clear>");
+                return;
+            }
+            final boolean clear = "clear".equalsIgnoreCase(args[1].trim())
+                    || "none".equalsIgnoreCase(args[1].trim());
+            final String body = clear ? "{\"key\":null}" : "{\"key\":\"" + jsonEscape(args[1].trim()) + "\"}";
+            if (clear) {
+                // Strip local tags BEFORE submitting, not on the response (I1): the Worker commits the
+                // key deletion before it replies, so a committed-but-response-lost clear must still leave
+                // the client display safe. finishUrchinKey then only confirms or warns about the server
+                // outcome; it never re-derives display safety from the network result.
+                StatsCache.stripUrchinTags();
+            }
+            send(sender, "§7Submitting Urchin key...");
+            URCHIN_EXEC.submit(() -> {
+                com.bedwarsqol.stats.ScraperBackendClient.SecretPostResult res =
+                        com.bedwarsqol.stats.ScraperBackendClient.postSecret(url, "/urchin/key", token, body);
+                scheduled(() -> finishUrchinKey(res, clear));
+            });
+        } catch (Throwable t) {
+            try { send(sender, "§cUrchin key update failed."); } catch (Throwable ignored) { }
+        }
+    }
+
+    private static void finishUrchinKey(com.bedwarsqol.stats.ScraperBackendClient.SecretPostResult res, boolean clear) {
+        if (clear) {
+            // Local tags were already stripped before the request was submitted (see handleUrchinKey):
+            // display safety must not depend on the response. On success confirm; on any failure or
+            // ambiguous transport outcome, warn generically that the server-side clear may not have
+            // taken effect (no key text).
+            if (res != null && res.success) {
+                local("§aUrchin key cleared.");
+            } else {
+                local("§eUrchin key clear submitted, but the server did not confirm it - the server-side "
+                        + "clear may not have taken effect. Retry, or remove it with §fwrangler secret "
+                        + "delete URCHIN_KEY§e / §fwrangler kv§e.");
+            }
+            return;
+        }
+        if (res != null && res.success) {
+            StatsCache.invalidateUrchinResolution();
+            local("§aUrchin key updated.");
+            return;
+        }
+        String err = res == null ? null : res.error;
+        if ("key_managed_by_secret".equals(err)) {
+            local("§cThe key is managed by a wrangler secret - use §fwrangler secret delete URCHIN_KEY§c first.");
+        } else if (res != null && res.status == 403) {
+            local("§cUnauthorized. Set a matching §f/bw statstoken§c, or provision with §fwrangler secret put URCHIN_KEY§c.");
+        } else {
+            local("§cUrchin key update failed. Check §f/bw statsurl§c/§fstatstoken§c, or use §fwrangler secret put URCHIN_KEY§c.");
+        }
+    }
+
+    /**
+     * Remove any {@code /bw|bedwarsqol|hypixelclient urchinkey ...} lines from the up-arrow history and
+     * verify. Returns true only when the history is confirmed clear; a null/unavailable chat GUI or an
+     * unverifiable removal fails closed (false), so the caller aborts before the key is posted (B1).
+     */
+    private static boolean scrubUrchinKeyHistory() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc == null || mc.ingameGUI == null) return false;
+        java.util.List<String> sent;
+        try {
+            sent = mc.ingameGUI.getChatGUI().getSentMessages();
+        } catch (Throwable t) {
+            return false;
+        }
+        return UrchinKeyScrub.scrubKeyEntries(sent);
+    }
+
+    private static String jsonEscape(String s) {
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    /** Run {@code r} on the client thread (chat/cache mutations must land there). */
+    private static void scheduled(Runnable r) {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc != null) mc.addScheduledTask(r);
+    }
+
+    private static void local(String message) {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc != null && mc.thePlayer != null) {
+            mc.thePlayer.addChatMessage(ModChat.mark(new ChatComponentText(message)));
         }
     }
 
