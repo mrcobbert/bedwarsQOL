@@ -7,6 +7,18 @@ $RepoZip     = 'https://github.com/mrcobbert/Cobblify/archive/refs/heads/main.zi
 $Work        = Join-Path $env:USERPROFILE '.bedwarsqol-setup'
 
 function Say($m) { Write-Host "`n$m" -ForegroundColor Cyan }
+# PS 5.1 quirk: capturing a native command's stderr (2>&1) while ErrorActionPreference is
+# 'Stop' turns ANY stderr line into a terminating error. Relax it just for these captures.
+function Capture([string[]]$a) {
+  $old = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try { return (& $npx @a 2>&1 | Out-String) } finally { $ErrorActionPreference = $old }
+}
+function CaptureStdout([string[]]$a) {
+  $old = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try { return (& $npx @a 2>$null | Out-String) } finally { $ErrorActionPreference = $old }
+}
 function Ok($m)  { Write-Host $m -ForegroundColor Green }
 function Die($m) {
   Write-Host "`nSetup failed: $m`n" -ForegroundColor Red
@@ -118,7 +130,7 @@ if ($LASTEXITCODE -ne 0) { Die 'npm install failed' }
 Ok 'Installed.'
 
 # 4. Log in to Cloudflare (opens a browser)
-$who = (& $npx wrangler whoami 2>&1 | Out-String)
+$who = Capture @('wrangler', 'whoami')
 if ($who -match 'not authenticated|not logged|wrangler login') {
   Say 'A browser window will open - log in or sign up for Cloudflare, then click "Allow".'
   & $npx wrangler login
@@ -129,11 +141,12 @@ Ok 'Logged in to Cloudflare.'
 # 5. Create the stats cache (KV namespace) and wire it into this copy of wrangler.toml
 Say 'Setting up the stats cache...'
 $kvTitle = 'STATS_KV'
-$kvOut = (& $npx wrangler kv namespace create STATS_KV 2>&1 | Out-String)
+$kvOut = Capture @('wrangler', 'kv', 'namespace', 'create', 'STATS_KV')
 $kvId = ([regex]::Match($kvOut, '[0-9a-f]{32}')).Value
 if (-not $kvId) {
   # Already exists from an earlier run - look its id up instead.
-  $raw = (& $npx wrangler kv namespace list 2>&1 | Out-String)
+  # Stdout only: stderr notices could contain a '[' and confuse the JSON trim below.
+  $raw = CaptureStdout @('wrangler', 'kv', 'namespace', 'list')
   # Trim to the outermost [...] - wrangler prints banners/update notices around the JSON.
   $i = $raw.IndexOf('[')
   $j = $raw.LastIndexOf(']')
@@ -158,7 +171,7 @@ if ($LASTEXITCODE -ne 0) { Die 'deploy failed' }
 # The URL was printed to the terminal above where we cannot read it, so re-deploy captured -
 # the subdomain now exists, so this second pass never prompts.
 Say 'Reading your backend address...'
-$deploy = (& $npx wrangler deploy 2>&1 | Out-String)
+$deploy = Capture @('wrangler', 'deploy')
 if ($LASTEXITCODE -ne 0) { Write-Host $deploy; Die 'deploy failed' }
 $m = [regex]::Match($deploy, 'https://[a-zA-Z0-9._-]+\.workers\.dev')
 if (-not $m.Success) { Write-Host $deploy; Die 'deployed, but could not read the URL from the output above' }
@@ -170,7 +183,10 @@ Say 'Locking your backend with a private token...'
 $bytes = New-Object byte[] 16
 [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
 $token = -join ($bytes | ForEach-Object { $_.ToString('x2') })
+$oldEap = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 $secretOut = ($token | & $npx wrangler secret put STATS_TOKEN 2>&1 | Out-String)
+$ErrorActionPreference = $oldEap
 if ($LASTEXITCODE -ne 0) { Write-Host $secretOut; Die 'could not set the backend token' }
 Ok 'Backend locked.'
 
