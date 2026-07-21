@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 
 $NodeVersion = 'v22.23.0'
 $NodePlat    = 'win-x64'   # the x64 build also runs fine on Windows-on-ARM via emulation
-$RepoZip     = 'https://github.com/mrcobbert/bedwarsQOL/archive/refs/heads/main.zip'
+$RepoZip     = 'https://github.com/mrcobbert/Cobblify/archive/refs/heads/main.zip'
 $Work        = Join-Path $env:USERPROFILE '.bedwarsqol-setup'
 
 function Say($m) { Write-Host "`n$m" -ForegroundColor Cyan }

@@ -3,7 +3,7 @@
 set -euo pipefail
 
 NODE_VERSION="v22.23.0"
-REPO_TARBALL="https://github.com/mrcobbert/bedwarsQOL/archive/refs/heads/main.tar.gz"
+REPO_TARBALL="https://github.com/mrcobbert/Cobblify/archive/refs/heads/main.tar.gz"
 WORKDIR="$HOME/.bedwarsqol-setup"
 
 say()  { printf '\n\033[1;36m%s\033[0m\n' "$*"; }
