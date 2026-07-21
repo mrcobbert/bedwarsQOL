@@ -193,6 +193,9 @@ Ok 'Backend locked.'
 $cmdUrl = "/cobblify statsurl $url"
 $cmdToken = "/cobblify statstoken $token"
 try { Set-Clipboard -Value $cmdUrl } catch {}
+# Also save the commands to a file so closing this window loses nothing.
+$cmdFile = Join-Path ([Environment]::GetFolderPath('Desktop')) 'cobblify-commands.txt'
+try { "$cmdUrl`r`n$cmdToken`r`n" | Set-Content -Path $cmdFile } catch { $cmdFile = $null }
 
 # Done
 Write-Host ''
@@ -210,3 +213,6 @@ Write-Host ''
 Write-Host 'Optional - community cheater tags from Urchin: get a free API key from the'
 Write-Host 'Urchin Discord bot (/grant), then run in chat:  /cobblify urchinkey <your key>'
 Write-Host ''
+if ($cmdFile) { Write-Host "Both commands are also saved to:  $cmdFile" }
+Write-Host ''
+Read-Host 'Press Enter to close this window'

@@ -130,6 +130,9 @@ ok "Backend locked."
 CMD_URL="/cobblify statsurl $URL"
 CMD_TOKEN="/cobblify statstoken $TOKEN"
 printf '%s' "$CMD_URL" | pbcopy 2>/dev/null || true
+# Also save the commands to a file so closing this window loses nothing.
+CMD_FILE="$HOME/Desktop/cobblify-commands.txt"
+printf '%s\n%s\n' "$CMD_URL" "$CMD_TOKEN" > "$CMD_FILE" 2>/dev/null || CMD_FILE=""
 
 # Done
 printf '\n\033[1;32m======================================================\n'
@@ -141,4 +144,5 @@ printf '   \033[1;33m%s\033[0m\n\n' "$CMD_TOKEN"
 printf 'Then turn on Hypixel Stats in the mod settings (press Right Shift).\n\n'
 printf 'Optional — community cheater tags from Urchin: get a free API key from the\n'
 printf 'Urchin Discord bot (/grant), then run in chat:  /cobblify urchinkey <your key>\n\n'
+[[ -n "$CMD_FILE" ]] && printf 'Both commands are also saved to:  %s\n\n' "$CMD_FILE"
 printf 'You can close this window.\n\n'
