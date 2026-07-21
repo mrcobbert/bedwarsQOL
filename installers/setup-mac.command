@@ -51,12 +51,21 @@ ok "Node.js ready ($(node -v))."
 # 2. Download the Worker source
 say "Downloading the Cobblify stats backend…"
 curl -fL# -o source.tar.gz "$REPO_TARBALL" || die "couldn't download the mod source"
+# Keep the previous run's npm packages so re-runs don't re-download them.
+PREV_NM="$(find "$WORKDIR/src-extract" -type d -path '*/server/stats-worker/node_modules' 2>/dev/null | head -1 || true)"
+if [[ -n "$PREV_NM" ]]; then
+  rm -rf "$WORKDIR/nm-cache"
+  mv "$PREV_NM" "$WORKDIR/nm-cache"
+fi
 rm -rf src-extract && mkdir src-extract
 tar -xzf source.tar.gz -C src-extract
 rm -f source.tar.gz
 WORKER_DIR="$(find "$WORKDIR/src-extract" -type d -path '*/server/stats-worker' | head -1)"
 [[ -n "$WORKER_DIR" ]] || die "couldn't find the worker folder in the download"
 cd "$WORKER_DIR"
+if [[ -d "$WORKDIR/nm-cache" ]]; then
+  mv "$WORKDIR/nm-cache" node_modules
+fi
 ok "Source ready."
 
 # 3. Install dependencies
@@ -84,9 +93,10 @@ if [[ -z "$KV_ID" ]]; then
     let d = "";
     process.stdin.on("data", c => d += c).on("end", () => {
       try {
-        const i = d.indexOf("[");
-        if (i < 0) return;
-        const ns = JSON.parse(d.slice(i)).find(n => n.title === process.argv[1]);
+        // Trim to the outermost [...] — wrangler prints banners/update notices around the JSON.
+        const i = d.indexOf("["), j = d.lastIndexOf("]");
+        if (i < 0 || j <= i) return;
+        const ns = JSON.parse(d.slice(i, j + 1)).find(n => n.title === process.argv[1]);
         if (ns && ns.id) process.stdout.write(ns.id);
       } catch (_) {}
     });' "$KV_TITLE" || true)"

@@ -91,13 +91,24 @@ Say 'Downloading the Cobblify stats backend...'
 $srcZip = Join-Path $Work 'source.zip'
 try { Invoke-WebRequest -UseBasicParsing $RepoZip -OutFile $srcZip } catch { Die 'could not download the mod source' }
 $ext = Join-Path $Work 'src-extract'
-if (Test-Path $ext) { Remove-Item $ext -Recurse -Force }
+$nmCache = Join-Path $Work 'nm-cache'
+if (Test-Path $ext) {
+  # Keep the previous run's npm packages so re-runs don't re-download them.
+  $prevNm = Get-ChildItem -Path $ext -Recurse -Directory -Filter 'node_modules' |
+            Where-Object { $_.FullName -match 'server\\stats-worker\\node_modules$' } | Select-Object -First 1
+  if ($prevNm) {
+    if (Test-Path $nmCache) { Remove-Item $nmCache -Recurse -Force }
+    Move-Item $prevNm.FullName $nmCache
+  }
+  Remove-Item $ext -Recurse -Force
+}
 Expand-Archive -Path $srcZip -DestinationPath $ext -Force
 Remove-Item $srcZip
 $worker = Get-ChildItem -Path $ext -Recurse -Directory -Filter 'stats-worker' |
           Where-Object { $_.FullName -match 'server\\stats-worker$' } | Select-Object -First 1
 if (-not $worker) { Die 'could not find the worker folder in the download' }
 Set-Location $worker.FullName
+if (Test-Path $nmCache) { Move-Item $nmCache (Join-Path $worker.FullName 'node_modules') }
 Ok 'Source ready.'
 
 # 3. Install dependencies
@@ -123,10 +134,12 @@ $kvId = ([regex]::Match($kvOut, '[0-9a-f]{32}')).Value
 if (-not $kvId) {
   # Already exists from an earlier run - look its id up instead.
   $raw = (& $npx wrangler kv namespace list 2>&1 | Out-String)
+  # Trim to the outermost [...] - wrangler prints banners/update notices around the JSON.
   $i = $raw.IndexOf('[')
-  if ($i -ge 0) {
+  $j = $raw.LastIndexOf(']')
+  if ($i -ge 0 -and $j -gt $i) {
     try {
-      $ns = ($raw.Substring($i) | ConvertFrom-Json) | Where-Object { $_.title -eq $kvTitle } | Select-Object -First 1
+      $ns = ($raw.Substring($i, $j - $i + 1) | ConvertFrom-Json) | Where-Object { $_.title -eq $kvTitle } | Select-Object -First 1
       if ($ns) { $kvId = $ns.id }
     } catch {}
   }
