@@ -415,3 +415,9 @@ error.txt
 
 # Wrangler local cache (repo root)
 .wrangler/
+
+# Local workflow scratch files
+.ai/
+.agents/
+.claude/
+analysis/
