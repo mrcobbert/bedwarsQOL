@@ -3,11 +3,11 @@ plugins {
 }
 
 group = "com.bedwarsqol"
-version = "0.5.0"
+version = "0.6.0"
 
 weave {
     configure {
-        name = "BedwarsQOL"
+        name = "Cobblify"
         modId = "bedwarsqol"
         entryPoints = listOf("com.bedwarsqol.BedwarsQol")
         mixinConfigs = listOf("mixins.bedwarsqol.json")

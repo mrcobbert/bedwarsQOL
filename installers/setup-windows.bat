@@ -1,6 +1,6 @@
 @echo off
-title BedwarsQOL stats backend setup
-echo Starting BedwarsQOL stats backend setup...
+title Cobblify stats backend setup
+echo Starting Cobblify stats backend setup...
 echo.
 
 set "PS1=%TEMP%\bedwarsqol-setup.ps1"

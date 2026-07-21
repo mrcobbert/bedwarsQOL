@@ -33,15 +33,15 @@ import net.weavemc.api.event.EventBus;
 public class BedwarsQol implements ModInitializer {
 
     public static final String MODID = "bedwarsqol";
-    public static final String NAME = "BedwarsQOL";
-    public static final String VERSION = "0.5.0";
+    public static final String NAME = "Cobblify";
+    public static final String VERSION = "0.6.0";
 
     public static ClientSettings config;
 
     @Override
     public void init() {
         config = SettingsManager.load();
-        DiagLog.init("BedwarsQOL v" + VERSION + " (lunar)");
+        DiagLog.init("Cobblify v" + VERSION + " (lunar)");
         CheaterDetector.logStartup();
 
         EventBus.subscribe(new KeybindRegistry());
@@ -63,6 +63,6 @@ public class BedwarsQol implements ModInitializer {
 
         CommandBus.register(new BedwarsQolCommand());
 
-        System.out.println("[BedwarsQOL] Weave mod initialized (v" + VERSION + ")");
+        System.out.println("[Cobblify] Weave mod initialized (v" + VERSION + ")");
     }
 }

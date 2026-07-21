@@ -35,14 +35,14 @@ public final class BedwarsStatsCommand {
     /** Fetch and print the stats card for {@code args[0]}, or the local player when {@code args} is empty. */
     public static void showStats(String[] args) {
         if (BedwarsQol.config == null || !BedwarsQol.config.playerStats) {
-            sendChat("§cPlayer Stats is disabled. Enable it in /bw.");
+            sendChat("§cPlayer Stats is disabled. Enable it in /cobblify.");
             return;
         }
 
         boolean backend = BedwarsQol.config.statsBackendUrl != null
                 && !BedwarsQol.config.statsBackendUrl.trim().isEmpty();
         if (!backend) {
-            sendChat("§cNo stats backend URL. Set §f/bw statsurl <url>§c.");
+            sendChat("§cNo stats backend URL. Set §f/cobblify statsurl <url>§c.");
             return;
         }
 

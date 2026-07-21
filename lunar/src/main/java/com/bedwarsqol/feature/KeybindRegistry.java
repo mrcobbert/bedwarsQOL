@@ -37,9 +37,9 @@ public final class KeybindRegistry {
             int sCode = BedwarsQol.config != null ? BedwarsQol.config.settingsKeyCode : Keyboard.KEY_RSHIFT;
             int pCode = BedwarsQol.config != null ? BedwarsQol.config.pauseKeyCode : Keyboard.KEY_NONE;
             int iCode = BedwarsQol.config != null ? BedwarsQol.config.pcIncKeyCode : Keyboard.KEY_NONE;
-            settingsKey = new KeyBinding("Open BedwarsQOL Settings", sCode, "key.categories.misc");
-            pauseKey = new KeyBinding("BedwarsQOL: Open Game Menu", pCode, "key.categories.misc");
-            incKey = new KeyBinding("BedwarsQOL: Send /pc INC", iCode, "key.categories.misc");
+            settingsKey = new KeyBinding("Open Cobblify Settings", sCode, "key.categories.misc");
+            pauseKey = new KeyBinding("Cobblify: Open Game Menu", pCode, "key.categories.misc");
+            incKey = new KeyBinding("Cobblify: Send /pc INC", iCode, "key.categories.misc");
             KeyBinding[] cur = mc.gameSettings.keyBindings;
             KeyBinding[] next = Arrays.copyOf(cur, cur.length + 3);
             next[cur.length] = settingsKey;

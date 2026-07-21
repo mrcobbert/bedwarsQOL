@@ -14,6 +14,60 @@ function Die($m) {
   exit 1
 }
 
+# Pixel-art banner (61 cols wide - safe in an 80-col conhost window).
+# File stays pure ASCII: block glyphs are built from char codes at runtime.
+function Show-Banner {
+  $B = [string][char]0x2588   # full block
+  $rows = @(
+    ' ###   ###  ####  ####  #     ### ##### #   #',
+    '#     #   # #   # #   # #      #  #      # # ',
+    '#     #   # ####  ####  #      #  ####    #  ',
+    '#     #   # #   # #   # #      #  #       #  ',
+    ' ###   ###  ####  ####  ##### ### #       #  '
+  )
+  $pad    = ''
+  $tagPad = ''
+  $rule   = [string][char]0x2500 * 8   # thin horizontal line
+
+  # Try to enable VT processing so truecolor ANSI works in conhost.
+  $vt = $false
+  try {
+    Add-Type -Namespace BwqolWin32 -Name Vt -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern System.IntPtr GetStdHandle(int nStdHandle);
+[DllImport("kernel32.dll")] public static extern bool GetConsoleMode(System.IntPtr hConsoleHandle, out uint lpMode);
+[DllImport("kernel32.dll")] public static extern bool SetConsoleMode(System.IntPtr hConsoleHandle, uint dwMode);
+'@ -ErrorAction Stop
+    $h = [BwqolWin32.Vt]::GetStdHandle(-11)
+    $mode = [uint32]0
+    if ([BwqolWin32.Vt]::GetConsoleMode($h, [ref]$mode)) {
+      $vt = [BwqolWin32.Vt]::SetConsoleMode($h, $mode -bor 4)
+    }
+  } catch {}
+
+  Write-Host ''
+  if ($vt) {
+    $e = [char]27
+    $r = "$e[0m"
+    $shades = @('235;235;235', '205;205;205', '175;175;175', '145;145;145', '115;115;115')
+    for ($i = 0; $i -lt $rows.Count; $i++) {
+      Write-Host ("$pad$e[38;2;$($shades[$i])m" + ($rows[$i] -replace '#', $B) + $r)
+    }
+    Write-Host ''
+    Write-Host ("$tagPad$e[38;2;100;100;100m$rule$e[38;2;190;190;190m  Created by MrCobbert  $e[38;2;100;100;100m$rule$r")
+  } else {
+    # No VT support: approximate the greyscale gradient with console colors.
+    $shades = @('White', 'Gray', 'Gray', 'DarkGray', 'DarkGray')
+    for ($i = 0; $i -lt $rows.Count; $i++) {
+      Write-Host ($pad + ($rows[$i] -replace '#', $B)) -ForegroundColor $shades[$i]
+    }
+    Write-Host ''
+    Write-Host ("$tagPad$rule  Created by MrCobbert  $rule") -ForegroundColor DarkGray
+  }
+  Write-Host ''
+}
+
+Show-Banner
+
 New-Item -ItemType Directory -Force -Path $Work | Out-Null
 Set-Location $Work
 
@@ -33,7 +87,7 @@ $npx = Join-Path $NodeDir 'npx.cmd'
 Ok "Node.js ready ($(& (Join-Path $NodeDir 'node.exe') -v))."
 
 # 2. Download the Worker source
-Say 'Downloading the BedwarsQOL stats backend...'
+Say 'Downloading the Cobblify stats backend...'
 $srcZip = Join-Path $Work 'source.zip'
 try { Invoke-WebRequest -UseBasicParsing $RepoZip -OutFile $srcZip } catch { Die 'could not download the mod source' }
 $ext = Join-Path $Work 'src-extract'
@@ -61,16 +115,55 @@ if ($who -match 'not authenticated|not logged|wrangler login') {
 }
 Ok 'Logged in to Cloudflare.'
 
-# 5. Deploy
-Say 'Deploying your stats backend... (if asked to pick a workers.dev name, type anything)'
-$deploy = (& $npx wrangler deploy 2>&1 | Out-String)
-Write-Host $deploy
+# 5. Create the stats cache (KV namespace) and wire it into this copy of wrangler.toml
+Say 'Setting up the stats cache...'
+$kvTitle = 'STATS_KV'
+$kvOut = (& $npx wrangler kv namespace create STATS_KV 2>&1 | Out-String)
+$kvId = ([regex]::Match($kvOut, '[0-9a-f]{32}')).Value
+if (-not $kvId) {
+  # Already exists from an earlier run - look its id up instead.
+  $raw = (& $npx wrangler kv namespace list 2>&1 | Out-String)
+  $i = $raw.IndexOf('[')
+  if ($i -ge 0) {
+    try {
+      $ns = ($raw.Substring($i) | ConvertFrom-Json) | Where-Object { $_.title -eq $kvTitle } | Select-Object -First 1
+      if ($ns) { $kvId = $ns.id }
+    } catch {}
+  }
+}
+if (-not $kvId) { Write-Host $kvOut; Die 'could not create the stats cache' }
+Add-Content -Path 'wrangler.toml' -Value "`n[[kv_namespaces]]`nbinding = `"STATS_KV`"`nid = `"$kvId`""
+Ok 'Stats cache ready.'
+
+# 6. Deploy - interactive on purpose: brand-new Cloudflare accounts are asked to register a
+# free workers.dev name here, and that prompt only appears when the output is a real terminal.
+Say 'Deploying your stats backend...'
+Say '(If asked to register a workers.dev subdomain, type anything - e.g. your Minecraft name.)'
+& $npx wrangler deploy
 if ($LASTEXITCODE -ne 0) { Die 'deploy failed' }
 
+# The URL was printed to the terminal above where we cannot read it, so re-deploy captured -
+# the subdomain now exists, so this second pass never prompts.
+Say 'Reading your backend address...'
+$deploy = (& $npx wrangler deploy 2>&1 | Out-String)
+if ($LASTEXITCODE -ne 0) { Write-Host $deploy; Die 'deploy failed' }
 $m = [regex]::Match($deploy, 'https://[a-zA-Z0-9._-]+\.workers\.dev')
-if (-not $m.Success) { Die 'deployed, but could not read the URL from the output above' }
-$cmd = "/bedwarsqol statsurl $($m.Value)"
-try { Set-Clipboard -Value $cmd } catch {}
+if (-not $m.Success) { Write-Host $deploy; Die 'deployed, but could not read the URL from the output above' }
+$url = $m.Value
+Ok "Backend live at $url"
+
+# 7. Lock the backend with a private token so only this user's mod can use it
+Say 'Locking your backend with a private token...'
+$bytes = New-Object byte[] 16
+[Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+$token = -join ($bytes | ForEach-Object { $_.ToString('x2') })
+$secretOut = ($token | & $npx wrangler secret put STATS_TOKEN 2>&1 | Out-String)
+if ($LASTEXITCODE -ne 0) { Write-Host $secretOut; Die 'could not set the backend token' }
+Ok 'Backend locked.'
+
+$cmdUrl = "/cobblify statsurl $url"
+$cmdToken = "/cobblify statstoken $token"
+try { Set-Clipboard -Value $cmdUrl } catch {}
 
 # Done
 Write-Host ''
@@ -78,9 +171,13 @@ Write-Host '======================================================' -ForegroundC
 Write-Host '  DONE!  Your stats backend is live.'                   -ForegroundColor Green
 Write-Host '======================================================' -ForegroundColor Green
 Write-Host ''
-Write-Host 'In Minecraft, paste this into chat (it is already on your clipboard):'
+Write-Host 'In Minecraft, paste BOTH commands into chat (the first is on your clipboard):'
 Write-Host ''
-Write-Host "   $cmd" -ForegroundColor Yellow
+Write-Host "   $cmdUrl" -ForegroundColor Yellow
+Write-Host "   $cmdToken" -ForegroundColor Yellow
 Write-Host ''
 Write-Host 'Then turn on Hypixel Stats in the mod settings (press Right Shift).'
+Write-Host ''
+Write-Host 'Optional - community cheater tags from Urchin: get a free API key from the'
+Write-Host 'Urchin Discord bot (/grant), then run in chat:  /cobblify urchinkey <your key>'
 Write-Host ''

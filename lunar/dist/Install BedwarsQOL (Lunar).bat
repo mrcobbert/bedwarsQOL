@@ -1,15 +1,15 @@
 @echo off
 setlocal
-REM BedwarsQOL - one-click installer for Lunar Client (Windows).
+REM Cobblify - one-click installer for Lunar Client (Windows).
 REM Double-click this file. It copies the Weave loader + the mod into place and
 REM prints the exact line to paste into Lunar's JVM Arguments.
 
 set "DIR=%~dp0"
 set "AGENT=Weave-Loader-Agent-1.3.3.jar"
-set "MOD=BedwarsQOL-Lunar-0.3.0.jar"
+set "MOD=Cobblify-Lunar-0.6.0.jar"
 
 echo.
-echo   Installing BedwarsQOL for Lunar Client...
+echo   Installing Cobblify for Lunar Client...
 
 if not exist "%DIR%%AGENT%" goto :missing
 if not exist "%DIR%%MOD%" goto :missing
@@ -32,7 +32,7 @@ echo.
 echo    4. Save, choose version 1.8.9, and click Play.
 echo.
 echo   After it loads, set your stats backend once, in chat:
-echo       /bedwarsqol statsurl ^<your-backend-url^>
+echo       /cobblify statsurl ^<your-backend-url^>
 echo   Press Right Shift in-game to open the settings menu.
 echo   ------------------------------------------------------------
 echo.

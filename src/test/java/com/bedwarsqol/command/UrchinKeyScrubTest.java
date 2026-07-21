@@ -26,6 +26,7 @@ public class UrchinKeyScrubTest {
                 "/bw urchinkey secret-lower",
                 "/BedwarsQol UrchinKey Secret-Mixed",
                 "/HYPIXELCLIENT URCHINKEY SECRET-UPPER",
+                "/Cobblify urchinkey secret-primary",
                 "/bw stats Notch"));
         assertTrue(UrchinKeyScrub.scrubKeyEntries(h));
         assertEquals(Collections.singletonList("/bw stats Notch"), h);

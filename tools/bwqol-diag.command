@@ -1,21 +1,24 @@
 #!/bin/bash
-# BedwarsQOL one-shot diagnostic collector (macOS).
-# Read-only: inspects the Weave/Lunar/BedwarsQOL install and writes ONE report
+# Cobblify (formerly BedwarsQOL) one-shot diagnostic collector (macOS).
+# Read-only: inspects the Weave/Lunar/Cobblify install and writes ONE report
 # file to the Desktop. Run it, then send bwqol-diag.txt back on Discord.
 #
 #   bash ~/Downloads/bwqol-diag.command
 #
 # Reference values below are from Jacob's known-good machine (Jul 2, 2026).
 
-GOOD_JAR_SHA="2265e20b26cf4bd1d6dfeb2e0446f01a5acb373f531efe4d4caa549c3eb5753d"
-GOOD_JAR_NAME="BedwarsQOL-Lunar-0.5.0.jar (built Jul 15 final2, 454764 bytes)"
+GOOD_JAR_SHA="d0a3e8ea255692739d57336285fa4ffcc3e0b4d738293dbeff3fa24fecda5a8b"
+GOOD_JAR_NAME="Cobblify-Lunar-0.6.0.jar (built Jul 20, 456115 bytes)"
+# Forge counterpart (Prism instance mods folder), for reference:
+GOOD_FORGE_JAR_SHA="9858b657d68bbd6a5e25563f29f03c99a5ee1facd1c6a7458c7e7982cb4c6d87"
+GOOD_FORGE_JAR_NAME="Cobblify-1.8.9-forge-0.6.0.jar"
 GOOD_LOADER_SHA="e63da5ed3cc85868088527cd7d49ebd708785b6567da389fe89a89913ef4afd2"
 GOOD_LOADER_NAME="Weave-Loader-Agent-1.3.3.jar"
 
 OUT="${BWQOL_OUT:-$HOME/Desktop/bwqol-diag.txt}"
 : > "$OUT" || { echo "Cannot write $OUT"; exit 1; }
 
-JAR_SUMMARY="no BedwarsQOL jar found in ~/.weave/mods"
+JAR_SUMMARY="no Cobblify/BedwarsQOL jar found in ~/.weave/mods"
 TOGGLE_SUMMARY="settings file not found"
 LOADER_SUMMARY="no Weave loader jar found in ~/.weave"
 NJARS=0
@@ -53,7 +56,7 @@ analyze_jar() {
     echo "verdict: $verdict" >> "$OUT"
     # Keep the worst verdict as the summary (anything non-CURRENT wins).
     case "$JAR_SUMMARY" in
-        CURRENT*|"no BedwarsQOL jar found"*) JAR_SUMMARY="$verdict" ;;
+        CURRENT*|"no Cobblify/BedwarsQOL jar found"*) JAR_SUMMARY="$verdict" ;;
     esac
 }
 
@@ -86,23 +89,25 @@ if [ -n "$LOADER" ]; then
     fi
 fi
 
-# -------- 3. BedwarsQOL jar(s) --------
-sec "BEDWARSQOL JAR ANALYSIS (~/.weave/mods)"
-for jar in "$HOME/.weave/mods/"*[Bb]edwars*.jar; do
+# -------- 3. Cobblify jar(s) --------
+sec "COBBLIFY JAR ANALYSIS (~/.weave/mods)"
+for jar in "$HOME/.weave/mods/"*[Cc]obblify*.jar "$HOME/.weave/mods/"*[Bb]edwars*.jar; do
     [ -f "$jar" ] || continue
     NJARS=$((NJARS + 1))
     [ $NJARS -gt 1 ] && echo "" >> "$OUT"
     analyze_jar "$jar"
 done
 if [ $NJARS -eq 0 ]; then
-    echo "NO BedwarsQOL jar in ~/.weave/mods -- the mod is not installed where Weave loads from." >> "$OUT"
+    echo "NO Cobblify (or old BedwarsQOL) jar in ~/.weave/mods -- the mod is not installed where Weave loads from." >> "$OUT"
 elif [ $NJARS -gt 1 ]; then
-    JAR_SUMMARY="MULTIPLE ($NJARS) BedwarsQOL jars in mods/ - old classes can win; keep exactly one. ($JAR_SUMMARY)"
+    JAR_SUMMARY="MULTIPLE ($NJARS) Cobblify/BedwarsQOL jars in mods/ - old classes can win; keep exactly one. ($JAR_SUMMARY)"
 fi
 
 # -------- 4. Mod settings --------
-sec "MOD SETTINGS (~/.bedwarsqol/bedwarsqol.json)"
-CFG="$HOME/.bedwarsqol/bedwarsqol.json"
+sec "MOD SETTINGS (~/.cobblify/cobblify.json, falling back to ~/.bedwarsqol/bedwarsqol.json)"
+CFG="$HOME/.cobblify/cobblify.json"
+[ -f "$CFG" ] || CFG="$HOME/.bedwarsqol/bedwarsqol.json"
+echo "settings file inspected: $CFG" >> "$OUT"
 if [ -f "$CFG" ]; then
     cat "$CFG" >> "$OUT"
     ps_all=$(grep -o '"playerStats"[^,}]*' "$CFG" | head -1)
@@ -124,6 +129,7 @@ else
     echo "settings file missing -- mod has never run (or wiped)" >> "$OUT"
 fi
 echo "-- stats cache --" >> "$OUT"
+ls -la "$HOME/.cobblify/" 2>/dev/null >> "$OUT"
 ls -la "$HOME/.bedwarsqol/" 2>/dev/null >> "$OUT"
 
 # -------- 5. Weave loader logs --------
@@ -155,8 +161,9 @@ for lg in "$HOME/.lunarclient/profiles/"*/logs/latest.log; do
 done
 
 # -------- 7. Stray copies (Downloads/Desktop) --------
-sec "STRAY BEDWARSQOL FILES (Downloads / Desktop)"
-ls -la "$HOME/Downloads/"*[Bb]edwars* "$HOME/Desktop/"*[Bb]edwars* 2>/dev/null >> "$OUT"
+sec "STRAY COBBLIFY/BEDWARSQOL FILES (Downloads / Desktop)"
+ls -la "$HOME/Downloads/"*[Cc]obblify* "$HOME/Desktop/"*[Cc]obblify* \
+      "$HOME/Downloads/"*[Bb]edwars* "$HOME/Desktop/"*[Bb]edwars* 2>/dev/null >> "$OUT"
 [ $? -ne 0 ] && echo "(none)" >> "$OUT"
 
 # -------- Verdict --------

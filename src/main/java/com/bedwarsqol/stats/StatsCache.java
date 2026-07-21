@@ -538,7 +538,7 @@ public final class StatsCache {
 
     private static File cacheFile() {
         // v2: richer entries (network level, rank, per-mode). Old v1 files are abandoned.
-        return new File(Loader.instance().getConfigDir(), "bedwarsqol-stats-cache-v2.json");
+        return new File(Loader.instance().getConfigDir(), "cobblify-stats-cache-v2.json");
     }
 
     private static void flushLoop() {

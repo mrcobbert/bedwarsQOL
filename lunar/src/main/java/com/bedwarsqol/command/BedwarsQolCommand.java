@@ -15,7 +15,7 @@ import java.util.Arrays;
 import java.util.Locale;
 
 /**
- * {@code /bw} — the mod's single command (aliases {@code /bedwarsqol}, {@code /hypixelclient}), ported
+ * {@code /cobblify} — the mod's single command (aliases {@code /bw}, {@code /bedwarsqol}, {@code /hypixelclient}), ported
  * to Weave's {@link Command}. No args opens the settings GUI; {@code mode} switches the in-chat FKDR
  * gamemode; {@code stats}/a bare player name prints a stats card; {@code statsurl}/{@code statstoken}
  * configure the backend; {@code help} lists everything. Output goes to local client chat.
@@ -23,7 +23,7 @@ import java.util.Locale;
 public class BedwarsQolCommand extends Command {
 
     public BedwarsQolCommand() {
-        super("bw", "bedwarsqol", "hypixelclient");
+        super("cobblify", "bw", "bedwarsqol", "hypixelclient");
     }
 
     @Override
@@ -32,7 +32,7 @@ public class BedwarsQolCommand extends Command {
         // is the first real argument (e.g. "mode", "stats", or a player name).
         String[] args = rawArgs.length > 1 ? Arrays.copyOfRange(rawArgs, 1, rawArgs.length) : new String[0];
         // Guard the whole dispatch. Weave cancels the outgoing chat only AFTER execute() returns
-        // normally, so ANY exception escaping here would leak the raw "/bw ..." to the server as a chat
+        // normally, so ANY exception escaping here would leak the raw "/cobblify ..." to the server as a chat
         // message — which is exactly why a failing subcommand showed up as "Unknown command". Report
         // locally and swallow instead.
         try {
@@ -105,16 +105,16 @@ public class BedwarsQolCommand extends Command {
     }
 
     private void sendHelp() {
-        send("§7§m----§r §6§lBedwarsQOL §r§7(/bw)§r §7§m----");
-        send("§f/bw §7— open the settings menu");
-        send("§f/bw <player> §7— a player's Bedwars stats");
-        send("§f/bw stats §7— your own stats");
-        send("§f/bw mode <auto|all|solo|2s|3s|4s> §7— chat FKDR gamemode");
-        send("§f/bw statsurl <url> §7— set the stats backend");
-        send("§f/bw statstoken <token> §7— set the backend token");
-        send("§f/bw urchin <player> §7— community Urchin tags for a player");
-        send("§f/bw urchinkey <key|clear> §7— set the server-side Urchin key");
-        send("§f/bw help §7— this page");
+        send("§7§m----§r §6§lCobblify §r§7(/cobblify, /bw)§r §7§m----");
+        send("§f/cobblify §7— open the settings menu");
+        send("§f/cobblify <player> §7— a player's Bedwars stats");
+        send("§f/cobblify stats §7— your own stats");
+        send("§f/cobblify mode <auto|all|solo|2s|3s|4s> §7— chat FKDR gamemode");
+        send("§f/cobblify statsurl <url> §7— set the stats backend");
+        send("§f/cobblify statstoken <token> §7— set the backend token");
+        send("§f/cobblify urchin <player> §7— community Urchin tags for a player");
+        send("§f/cobblify urchinkey <key|clear> §7— set the server-side Urchin key");
+        send("§f/cobblify help §7— this page");
         send("§7§m------------------------------");
     }
 
@@ -122,7 +122,7 @@ public class BedwarsQolCommand extends Command {
         ClientSettings cfg = settings();
         if (args.length < 2 || "show".equalsIgnoreCase(args[1])) {
             send("§eChat stats FKDR mode: §f" + modeLabel(cfg.chatStatsMode));
-            send("§7Change with §f/bw mode <auto|all|solo|2s|3s|4s>§7.");
+            send("§7Change with §f/cobblify mode <auto|all|solo|2s|3s|4s>§7.");
             return;
         }
         String canonical = canonicalMode(args[1]);
@@ -166,7 +166,7 @@ public class BedwarsQolCommand extends Command {
         ClientSettings cfg = settings();
         if (args.length < 2 || "show".equalsIgnoreCase(args[1])) {
             if (cfg.statsBackendUrl.isEmpty()) {
-                send("§eNo stats backend URL set. Use §f/bw statsurl <url>§e.");
+                send("§eNo stats backend URL set. Use §f/cobblify statsurl <url>§e.");
             } else {
                 send("§aStats backend: §f" + cfg.statsBackendUrl);
             }
@@ -232,22 +232,22 @@ public class BedwarsQolCommand extends Command {
                 return t;
             });
 
-    /** {@code /bw urchin <name>} — on-demand community-tag lookup via the Worker's manual route. */
+    /** {@code /cobblify urchin <name>} — on-demand community-tag lookup via the Worker's manual route. */
     private void handleUrchin(String[] args) {
         ClientSettings cfg = settings();
         if (!cfg.urchinTags) {
-            send("§cUrchin Tags is disabled. Enable it in /bw.");
+            send("§cUrchin Tags is disabled. Enable it in /cobblify.");
             return;
         }
         if (args.length < 2 || args[1].trim().isEmpty()) {
-            send("§eUsage: §f/bw urchin <player>");
+            send("§eUsage: §f/cobblify urchin <player>");
             return;
         }
         final String name = args[1].trim();
         final String url = cfg.statsBackendUrl;
         final String token = cfg.statsBackendToken;
         if (url == null || url.trim().isEmpty()) {
-            send("§cNo stats backend URL. Set §f/bw statsurl <url>§c.");
+            send("§cNo stats backend URL. Set §f/cobblify statsurl <url>§c.");
             return;
         }
         send("§7Looking up Urchin tags for §f" + name + "§7...");
@@ -281,7 +281,7 @@ public class BedwarsQolCommand extends Command {
             else local("§a" + name + " §7has no Urchin tags.");
             return;
         }
-        local("§8[§6BWQOL§8] §fUrchin tags for §e" + name + (r.stale ? " §8(cached)" : "") + "§7:");
+        local("§8[§6Cobblify§8] §fUrchin tags for §e" + name + (r.stale ? " §8(cached)" : "") + "§7:");
         java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US);
         for (com.bedwarsqol.stats.UrchinTag t : tags) {
             StringBuilder sb = new StringBuilder("  ").append(t.color()).append("[")
@@ -293,7 +293,7 @@ public class BedwarsQolCommand extends Command {
     }
 
     /**
-     * {@code /bw urchinkey <key|clear>} — sets/clears the server-side Urchin key. The key never touches
+     * {@code /cobblify urchinkey <key|clear>} — sets/clears the server-side Urchin key. The key never touches
      * chat history, disk, logs, exceptions, or URLs. The whole handler is guarded so it can never throw.
      */
     private void handleUrchinKey(String[] args) {
@@ -309,11 +309,11 @@ public class BedwarsQolCommand extends Command {
             final String url = cfg.statsBackendUrl;
             final String token = cfg.statsBackendToken;
             if (url == null || url.trim().isEmpty()) {
-                send("§cNo stats backend URL. Set §f/bw statsurl <url>§c first.");
+                send("§cNo stats backend URL. Set §f/cobblify statsurl <url>§c first.");
                 return;
             }
             if (args.length < 2 || args[1].trim().isEmpty()) {
-                send("§eUsage: §f/bw urchinkey <key|clear>");
+                send("§eUsage: §f/cobblify urchinkey <key|clear>");
                 return;
             }
             final boolean clear = "clear".equalsIgnoreCase(args[1].trim())
@@ -361,14 +361,14 @@ public class BedwarsQolCommand extends Command {
         if ("key_managed_by_secret".equals(err)) {
             local("§cThe key is managed by a wrangler secret - use §fwrangler secret delete URCHIN_KEY§c first.");
         } else if (res != null && res.status == 403) {
-            local("§cUnauthorized. Set a matching §f/bw statstoken§c, or provision with §fwrangler secret put URCHIN_KEY§c.");
+            local("§cUnauthorized. Set a matching §f/cobblify statstoken§c, or provision with §fwrangler secret put URCHIN_KEY§c.");
         } else {
-            local("§cUrchin key update failed. Check §f/bw statsurl§c/§fstatstoken§c, or use §fwrangler secret put URCHIN_KEY§c.");
+            local("§cUrchin key update failed. Check §f/cobblify statsurl§c/§fstatstoken§c, or use §fwrangler secret put URCHIN_KEY§c.");
         }
     }
 
     /**
-     * Remove any {@code /bw|bedwarsqol|hypixelclient urchinkey ...} lines from the up-arrow history and
+     * Remove any {@code /bw|bedwarsqol|hypixelclient|cobblify urchinkey ...} lines from the up-arrow history and
      * verify. Returns true only when the history is confirmed clear; a null/unavailable chat GUI or an
      * unverifiable removal fails closed (false), so the caller aborts before the key is posted (B1).
      */

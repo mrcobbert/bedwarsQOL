@@ -1,4 +1,4 @@
-# BedwarsQOL
+# Cobblify
 
 A Hypixel BedWars quality-of-life mod for **Minecraft 1.8.9**, on **Forge** or **Lunar Client**, featuring several modules and a custom GUI.
 
@@ -10,16 +10,16 @@ policy — no automation of player actions, no unfair advantages.
 ### Forge
 
 1. Have a **Minecraft Forge 1.8.9** instance
-2. Download the latest **`BedwarsQOL-1.8.9-forge-<version>.jar`** from the
+2. Download the latest **`Cobblify-1.8.9-forge-<version>.jar`** from the
    [**Releases**](../../releases/latest) page.
 3. Drop it into your instance's `mods/` folder.
-4. Launch the game. Press **Right Shift** (or run `/bedwarsqol`) to open the settings (bind can be changed in minecraft settings).
+4. Launch the game. Press **Right Shift** (or run `/cobblify`) to open the settings (bind can be changed in minecraft settings).
 
 ### Lunar Client
 
-1. Download the **`BedwarsQOL-Lunar-<version>`** bundle for your OS from the [**Releases**](../../releases) page (look for the latest `lunar-` release) and unzip it.
+1. Download the **`Cobblify-Lunar-<version>`** bundle for your OS from the [**Releases**](../../releases) page (look for the latest `lunar-` release) and unzip it.
 2. Double-click the installer (**`Install BedwarsQOL (Lunar).command`** on Mac, **`.bat`** on Windows). It copies the Weave loader + mod into place and prints a `-javaagent:` line.
-3. In Lunar: Settings → turn on **Advanced Mode** → paste that line into **JVM Arguments** → save, pick **1.8.9**, and Play. Press **Right Shift** (or run `/bedwarsqol`) in-game to open the settings.
+3. In Lunar: Settings → turn on **Advanced Mode** → paste that line into **JVM Arguments** → save, pick **1.8.9**, and Play. Press **Right Shift** (or run `/cobblify`) in-game to open the settings.
 
 **NOTE:** Stats and AntiSnipe need a one-time backend setup — see below (~5 minutes).
 
@@ -31,13 +31,15 @@ Hypixel stats are served by a tiny **Cloudflare Worker you self-host** (free, pr
    - **Windows:** double-click [`installers/setup-windows.bat`](installers/setup-windows.bat)
    - **Mac:** double-click [`installers/setup-mac.command`](installers/setup-mac.command)
 
-2. Follow the prompts. A browser opens to log in or sign up for Cloudflare (free). The script deploys the Worker and copies a command to your clipboard.
+2. Follow the prompts. A browser opens to log in or sign up for Cloudflare (free). If Cloudflare asks you to register a `workers.dev` name, type anything (e.g. your Minecraft name). The script deploys the Worker, locks it with a private token, and prints two chat commands (the first is copied to your clipboard).
 
-3. In Minecraft, paste the command into chat, then enable **Hypixel Stats** in the mod GUI (Right Shift).
+3. In Minecraft, paste both commands into chat (`/cobblify statsurl ...` and `/cobblify statstoken ...`), then enable **Hypixel Stats** in the mod GUI (Right Shift).
 
 That's it.
 
-## Features: BedwarsQOL — Features
+**Optional - Urchin cheater tags:** get a free API key from the Urchin Discord bot (`/grant`), then run `/cobblify urchinkey <your key>` in chat. Your key stays on your own Worker; the mod never holds it.
+
+## Features: Cobblify — Features
 
 ### HUD (draggable/resizable)
   - **Potion** - active potion effects + timers
@@ -66,16 +68,16 @@ That's it.
 ### Other
   - **Auto GG** - say "gg" in chat once each time a BedWars game ends
   - Practice/Debug : spawn clientside practice dummies
-  - Custom settings GUI (Right Shift or /bedwarsqol), GUI scale + color themes
+  - Custom settings GUI (Right Shift or /cobblify), GUI scale + color themes
 
 
 ## Showcase
 
 ### GUI
-![BedwarsQOL demo](assets/demo1.png)
+![Cobblify demo](assets/demo1.png)
 
 ### HUD Editor
-![BedwarsQOL demo](assets/demo2.png)
+![Cobblify demo](assets/demo2.png)
 
 ## Build from source (for developers)
 
@@ -87,7 +89,7 @@ Requires JDK 21 (Temurin recommended) for Gradle.
 ./gradlew build
 ```
 
-Output: `versions/1.8.9-forge/build/libs/BedwarsQOL-1.8.9-forge-<version>.jar`
+Output: `versions/1.8.9-forge/build/libs/Cobblify-1.8.9-forge-<version>.jar`
 (the remapped production jar; ignore the `-dev.jar`, which is for the `runClient` dev environment).
 
 **Lunar Client (Weave):**
@@ -96,7 +98,7 @@ Output: `versions/1.8.9-forge/build/libs/BedwarsQOL-1.8.9-forge-<version>.jar`
 cd lunar && ./gradlew build
 ```
 
-Output: `lunar/build/libs/BedwarsQOL-Lunar-<version>.jar`.
+Output: `lunar/build/libs/Cobblify-Lunar-<version>.jar`.
 
 ## Credits
 

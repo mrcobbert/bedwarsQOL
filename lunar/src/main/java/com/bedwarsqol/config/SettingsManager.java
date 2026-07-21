@@ -2,7 +2,6 @@ package com.bedwarsqol.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.bedwarsqol.BedwarsQol;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -54,9 +53,13 @@ public final class SettingsManager {
         }
     }
 
-    /** Mod data dir (~/.bedwarsqol); Forge's config dir is unavailable under Weave. */
+    /** Mod data dir (~/.cobblify); Forge's config dir is unavailable under Weave. */
     private static File settingsFile() {
-        File dir = new File(System.getProperty("user.home"), ".bedwarsqol");
-        return new File(dir, BedwarsQol.MODID + ".json");
+        File dir = new File(System.getProperty("user.home"), ".cobblify");
+        File file = new File(dir, "cobblify.json");
+        // BedwarsQOL → Cobblify rename: one-time copy of the old settings json (old file kept).
+        File oldDir = new File(System.getProperty("user.home"), ".bedwarsqol");
+        ConfigMigration.copySettingsIfNeeded(new File(oldDir, "bedwarsqol.json"), file);
+        return file;
     }
 }

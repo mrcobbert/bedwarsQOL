@@ -2,7 +2,6 @@ package com.bedwarsqol.config;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.bedwarsqol.BedwarsQol;
 import net.minecraftforge.fml.common.Loader;
 
 import java.io.File;
@@ -56,6 +55,10 @@ public final class SettingsManager {
     }
 
     private static File settingsFile() {
-        return new File(Loader.instance().getConfigDir(), BedwarsQol.MODID + ".json");
+        File dir = Loader.instance().getConfigDir();
+        File file = new File(dir, "cobblify.json");
+        // BedwarsQOL → Cobblify rename: one-time copy of the old settings json (old file kept).
+        ConfigMigration.copySettingsIfNeeded(new File(dir, "bedwarsqol.json"), file);
+        return file;
     }
 }

@@ -14,14 +14,14 @@ final class UrchinKeyScrub {
     private UrchinKeyScrub() {}
 
     private static final Pattern URCHIN_KEY_LINE = Pattern.compile(
-            "^/(bw|bedwarsqol|hypixelclient)\\s+urchinkey\\b", Pattern.CASE_INSENSITIVE);
+            "^/(bw|bedwarsqol|hypixelclient|cobblify)\\s+urchinkey\\b", Pattern.CASE_INSENSITIVE);
 
     static boolean matches(String line) {
         return line != null && URCHIN_KEY_LINE.matcher(line.trim()).find();
     }
 
     /**
-     * Remove every {@code /(bw|bedwarsqol|hypixelclient) urchinkey ...} entry from {@code sentMessages}
+     * Remove every {@code /(bw|bedwarsqol|hypixelclient|cobblify) urchinkey ...} entry from {@code sentMessages}
      * and verify. Returns true ONLY when, after the removal attempt, no matching entry remains (the
      * removal is re-scanned to confirm it actually took effect). Fails closed - returns false - on a
      * null list, a mutation exception (an unmodifiable or concurrently-changing list), or any surviving

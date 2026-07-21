@@ -50,13 +50,13 @@ public class BedwarsQol {
     @Mod.EventHandler
     public void onInit(FMLInitializationEvent event) {
         config = SettingsManager.load();
-        DiagLog.init("BedwarsQOL v" + VERSION + " (forge)");
+        DiagLog.init("Cobblify v" + VERSION + " (forge)");
         CheaterDetector.logStartup();
-        settingsKeyBinding = new KeyBinding("Open BedwarsQOL Settings", config.settingsKeyCode, "BedwarsQOL");
+        settingsKeyBinding = new KeyBinding("Open Cobblify Settings", config.settingsKeyCode, "Cobblify");
         ClientRegistry.registerKeyBinding(settingsKeyBinding);
-        pauseKeyBinding = new KeyBinding("Open Game Menu", Keyboard.KEY_NONE, "BedwarsQOL");
+        pauseKeyBinding = new KeyBinding("Open Game Menu", Keyboard.KEY_NONE, "Cobblify");
         ClientRegistry.registerKeyBinding(pauseKeyBinding);
-        incKeyBinding = new KeyBinding("Send /pc INC", Keyboard.KEY_NONE, "BedwarsQOL");
+        incKeyBinding = new KeyBinding("Send /pc INC", Keyboard.KEY_NONE, "Cobblify");
         ClientRegistry.registerKeyBinding(incKeyBinding);
         ClientCommandHandler.instance.registerCommand(new BedwarsQolCommand());
         MinecraftForge.EVENT_BUS.register(new SettingsKeyHandler(settingsKeyBinding));

@@ -9,7 +9,7 @@ import java.util.Date;
 
 /**
  * Tiny always-on diagnostic trail for the chat-tag pipeline, written to
- * {@code ~/.bedwarsqol/chat-diag.log} (the same well-known dir on Forge and Lunar, so "send me
+ * {@code ~/.cobblify/chat-diag.log} (the same well-known dir on Forge and Lunar, so "send me
  * that file" is one instruction for every install). One line per lifecycle event of a tracked
  * chat line — receive/hoist, trust verdict, tag back-patch with how late it landed, and what a
  * world change wiped — so a "tags missing on his machine" report can be diagnosed from a single
@@ -30,7 +30,7 @@ public final class DiagLog {
 
     public static synchronized void init(String header) {
         try {
-            File dir = new File(System.getProperty("user.home"), ".bedwarsqol");
+            File dir = new File(System.getProperty("user.home"), ".cobblify");
             if (!dir.isDirectory() && !dir.mkdirs()) return;
             File file = new File(dir, "chat-diag.log");
             // Append across launches so a game from an earlier session isn't wiped the moment you

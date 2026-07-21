@@ -109,7 +109,7 @@ public final class UrchinAlert {
     private void announceAlert(Minecraft mc, ClientSettings cfg, String name, BedwarsStats stats,
                                UrchinTag tag, long now) {
         String icon = tag.displayIcon();
-        ChatComponentText msg = new ChatComponentText("§8[§6BWQOL§8] §e" + name
+        ChatComponentText msg = new ChatComponentText("§8[§6Cobblify§8] §e" + name
                 + " §7has a community-reported Urchin tag " + tag.color() + "[" + icon + "]");
         msg.getChatStyle()
                 .setChatHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
@@ -129,7 +129,7 @@ public final class UrchinAlert {
         if (!CheaterDetector.get().hasLiveFlags(name)) return;
         if (!fusionFired.add(key)) return;
         FUSION_HIGHLIGHT.add(key);
-        ChatComponentText msg = new ChatComponentText("§8[§cBWQOL§8] §c" + name
+        ChatComponentText msg = new ChatComponentText("§8[§cCobblify§8] §c" + name
                 + "§7: community-reported Urchin tag " + tag.color() + "[" + tag.displayIcon()
                 + "]§7 + §clive AC flags");
         mc.thePlayer.addChatMessage(ModChat.mark(msg));

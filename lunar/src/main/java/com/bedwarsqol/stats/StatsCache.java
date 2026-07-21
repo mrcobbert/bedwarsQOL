@@ -537,12 +537,12 @@ public final class StatsCache {
 
     private static File cacheFile() {
         // v2: richer entries (network level, rank, per-mode). Old v1 files are abandoned.
-        return new File(configDir(), "bedwarsqol-stats-cache-v2.json");
+        return new File(configDir(), "cobblify-stats-cache-v2.json");
     }
 
-    /** Mod data dir (~/.bedwarsqol), created on demand. Forge's config dir is unavailable under Weave. */
+    /** Mod data dir (~/.cobblify), created on demand. Forge's config dir is unavailable under Weave. */
     private static File configDir() {
-        File dir = new File(System.getProperty("user.home"), ".bedwarsqol");
+        File dir = new File(System.getProperty("user.home"), ".cobblify");
         if (!dir.isDirectory()) dir.mkdirs();
         return dir;
     }
